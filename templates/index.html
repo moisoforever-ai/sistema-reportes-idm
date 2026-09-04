@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de reportes</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="glass-card">
+            <div class="toolbar">
+                <div class="toolbar-brand">
+                    <div class="toolbar-brand-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><rect x="7" y="13" width="3" height="5"/><rect x="12" y="9" width="3" height="9"/><rect x="17" y="6" width="3" height="12"/></svg>
+                    </div>
+                    <div class="toolbar-brand-text">
+                        <div class="toolbar-brand-eyebrow">IDM · Inteligencia de Mercado</div>
+                        <h1>Sistema de reportes</h1>
+                    </div>
+                </div>
+                <div class="toolbar-actions">
+                    <button id="sync-btn" class="btn-chip btn-sync" title="Sincronizar con Google Sheets">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
+                        <span class="sync-text">Sincronizar</span>
+                    </button>
+                    {% if session.get('user') == 'admin' %}
+                    <a href="/admin/users" class="btn-chip btn-admin-link" title="Administrar Usuarios">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                        <span>Administrar</span>
+                    </a>
+                    <a href="/admin/parametros" class="btn-chip btn-admin-link" title="Parámetros de Proyección">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 12l3-3 3 3 5-5"/></svg>
+                        <span>Parámetros</span>
+                    </a>
+                    {% endif %}
+                    <a href="/logout" class="btn-chip btn-logout" title="Cerrar sesión">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                        <span>Salir</span>
+                    </a>
+                </div>
+            </div>
+
+            <p class="subtitle" style="margin-top: -16px; margin-bottom: 24px;">Estandarización y generación de reportes de auditoría de tiendas.</p>
+
+            <main>
+                <div id="loader-initial" class="initial-loader">
+                    <div class="spinner"></div>
+                    <p id="loader-initial-text">Cargando parámetros desde Google Sheets…</p>
+                </div>
+
+                <!-- Fix UX: antes, si /api/options fallaba (Google Sheets caído, red
+                     lenta), el spinner de arriba quedaba girando para siempre y el
+                     único aviso era un toast que desaparecía solo en 4 segundos, sin
+                     forma de reintentar sin recargar la página entera. -->
+                <div id="loader-error" class="initial-loader hidden">
+                    <p>No se pudieron cargar los parámetros desde Google Sheets.</p>
+                    <button type="button" id="retry-options-btn" class="btn-submit" style="width: auto; padding: 10px 24px;">
+                        <span class="btn-text">Reintentar</span>
+                    </button>
+                </div>
+
+                <form id="report-form" class="hidden">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="mes">Mes del estudio</label>
+                            <select id="mes" name="mes" required>
+                                <option value="" disabled selected>Seleccione un mes</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="fecha">Día / fecha</label>
+                            <select id="fecha" name="fecha" required disabled>
+                                <option value="" disabled selected>Seleccione el mes primero</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="empresa">Empresa</label>
+                            <select id="empresa" name="empresa" required>
+                                <option value="" disabled selected>Seleccione una empresa</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="sucursal">Sucursal / sede</label>
+                            <select id="sucursal" name="sucursal" required disabled>
+                                <option value="" disabled selected>Seleccione la empresa primero</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="hora_apertura">Hora de apertura del local</label>
+                            <div class="time-selector-container">
+                                <input type="time" id="hora_apertura" name="hora_apertura" value="09:00" required>
+                                <span class="time-hint">La proyección de la mañana inicia desde esta hora.</span>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="hora_cierre">Hora de cierre del local</label>
+                            <div class="time-selector-container">
+                                <input type="time" id="hora_cierre" name="hora_cierre" value="19:00" required>
+                                <span class="time-hint">El reporte filtra registros hasta este horario.</span>
+                            </div>
+                            <!-- Fix UX: antes no había validación de que la hora de
+                                 cierre fuera posterior a la de apertura; el reporte
+                                 se generaba igual pero con la proyección en 0%,
+                                 silenciosamente incorrecta. -->
+                            <span id="horario-error" class="time-hint hidden" style="color: var(--negative);">La hora de cierre debe ser posterior a la de apertura.</span>
+                        </div>
+                    </div>
+
+                    <div class="info-banner">
+                        <div class="banner-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                        </div>
+                        <div class="banner-text">
+                            <strong>Cálculo de proyecciones activo.</strong> Se aplicará la proyección horaria automática según los tiempos de apertura y cierre del local.
+                        </div>
+                    </div>
+
+                    <div class="button-group">
+                        <button type="submit" id="submit-btn" class="btn-submit">
+                            <span class="btn-text">Generar reporte (Excel)</span>
+                            <div class="btn-loader hidden">
+                                <div class="small-spinner"></div>
+                                <span>Procesando…</span>
+                            </div>
+                        </button>
+                        <button type="button" id="obs-btn" class="btn-secondary">
+                            <span class="btn-text">Generar observaciones (TXT)</span>
+                            <div class="btn-loader hidden">
+                                <div class="small-spinner"></div>
+                                <span>Procesando…</span>
+                            </div>
+                        </button>
+                    </div>
+                </form>
+            </main>
+
+            <footer>
+                © 2026 Departamento de IDM · v7.0
+            </footer>
+        </div>
+    </div>
+
+    <!-- Notification Toast -->
+    <div id="toast" class="toast hidden">
+        <span id="toast-message">Mensaje</span>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,34 @@
+﻿# Python
+__pycache__/
+*.py[cod]
+*.class
+*.pyc
+
+# Environment & config
+.env
+.venv/
+env/
+venv/
+ENV/
+
+# Logs
+*.log
+server.log
+
+# Excel & Temporary outputs
+*.xlsx
+*.zip
+
+# Editor & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Legacy or obsolete files
+df_maestro_0_cache.csv
+
+df_campo_cache.csv
+df_maestro_*_cache.csv
+users.json
+parametros.json
