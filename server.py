@@ -198,20 +198,27 @@ GID_BASE_MULTIMAX = "2089283830"
 # esto, cada categoría tiene SIEMPRE el mismo color en todos los reportes
 # (útil para comparar reportes de distintas fechas/tiendas a simple vista),
 # y ninguno choca con el naranja/azul ya usados para Promo.
-CATEGORIA_COLORES = {
-    'NEVERA': '4E79A7',
-    'TV': 'F28E2B',
-    'LAVADO': 'E15759',
-    'CONGELADOR': '76B7B2',
-    'ELECTRODOMESTICOS': '59A14F',
-    'COCINA': 'EDC948',
-    'SONIDO': 'B07AA1',
-    'COMPUTACION': 'FF9DA7',
-    'TELEFONIA': '9C755F',
-    'A/A': 'BAB0AC',
-    'OTROS': '6B6B6B',
-}
-COLOR_CATEGORIA_DEFAULT = '95A5A6'  # por si aparece una categoría nueva sin mapear
+# --- PALETA DE COLORES DEL GRÁFICO DE CATEGORÍAS (gráfico de torta del Excel) ---
+# FIX (organización/estética de gráficas, ajustado a pedido del cliente para
+# calzar EXACTO con los reportes que ya hacen a mano): el reporte de referencia
+# no usa un color fijo por nombre de categoría — usa los 6 colores de acento
+# por defecto de Excel ("tema Office"), asignados por POSICIÓN en la tabla
+# (que está ordenada por venta descendente), repitiendo con una variante más
+# oscura para las categorías 7 en adelante. Se replican acá los valores hex
+# exactos (calculados a partir del tema real de un archivo de referencia).
+PALETA_CATEGORIAS_POSICION = [
+    "4472C4",  # accent1 - azul
+    "ED7D31",  # accent2 - naranja
+    "A5A5A5",  # accent3 - gris
+    "FFC000",  # accent4 - dorado
+    "5B9BD5",  # accent5 - celeste
+    "70AD47",  # accent6 - verde
+    "264478",  # accent1 oscuro (lumMod 60%)
+    "9E480E",  # accent2 oscuro
+    "636363",  # accent3 oscuro
+    "997300",  # accent4 oscuro
+    "255E91",  # accent5 oscuro
+]
 
 # --- DATA URLS ---
 URL_TIPIFICACIONES = f"https://docs.google.com/spreadsheets/d/e/2PACX-1vTfq81DhLQ_8jkbFIAs7OWaO7qkYRis350TTRz_BbbsVucVw4K87Ai0YgiynRIQG1CqRJv9i1V6oEDo/pub?gid={GID_TIPIFICACIONES}&single=true&output=csv"
@@ -719,6 +726,82 @@ def normalize_brands_for_matching(text):
     t = re.sub(r'\bda\+co\b', 'damasco', t)
     t = re.sub(r'\bdaco\b', 'damasco', t)
     return t
+
+def limpiar_descripcion_producto(texto):
+    """
+    Limpia la descripción de un producto ya emparejado (PRODUCTO_CORRECTO) para
+    el reporte, removiendo códigos internos de SKU/modelo que no aportan nada
+    en un reporte gerencial — igual a como el equipo lo hace a mano hoy (ver
+    bitácora, pedido explícito de calcar los reportes manuales).
+
+    Solo se aplica DESPUÉS del matching, sobre el texto que se muestra —
+    nunca sobre el texto que usa el motor de comparación (buscar_coincidencia_
+    tecnica sigue comparando contra el texto original completo, sin tocar).
+
+    Preserva specs técnicas relevantes (capacidad, voltaje, tamaño, BTU, etc.)
+    y nombres de línea de producto reales (ej. "GALAXY A57", "X9B") — solo
+    descarta tokens que mezclan letras y números de forma típica de un
+    código de catálogo/modelo interno (ej. "DMTL-MS12-W1", "MCL2440ESBB0").
+    """
+    if not isinstance(texto, str) or not texto.strip():
+        return texto
+
+    t = texto.strip()
+
+    # Normalizar "DA+CO" (como se ve la marca repetida en el propio nombre)
+    # a "DAMASCO", igual que en los reportes de referencia.
+    t = re.sub(r'\bDA\+CO\b', 'DAMASCO', t, flags=re.IGNORECASE)
+
+    # Remover códigos puramente numéricos con guión (ej. "086-545979")
+    t = re.sub(r'\b\d{2,4}-\d{4,8}\b', '', t)
+
+    # Unidades/specs conocidas que NUNCA se deben confundir con un código de
+    # modelo, aunque mezclen letra y número. Cubre varios formatos reales
+    # encontrados en las 3 listas maestras:
+    #   - simple:      "220V", "12000BTU", "1.5L"
+    #   - rango:        "13-25MM", "12-18KG"
+    #   - dimensión x:  "92X30", "100X200CM"
+    #   - dimensión LW: "L100*W100", "L100*W100*H50"
+    #   - combo con +:  "256GB+12GB", "8+512GB" (RAM+almacenamiento de celulares)
+    UNIDAD = r'(BTU|KGS?|LTS?|LT|L|ML|V|VA|WATT|W|HZ|GB|MB|TB|MM|CM|M|"|\'|HRS?|H|PZAS?|PZ|PCS|PIES?|K)'
+    NUM = r'\d+(?:[.,]\d+)?'
+    patron_spec = re.compile(
+        rf'^('
+        rf'{NUM}{UNIDAD}?'                                  # numero + unidad opcional
+        rf'|{NUM}-{NUM}{UNIDAD}?'                            # rango: 13-25MM
+        rf'|{NUM}[xX]{NUM}{UNIDAD}?'                         # dimension: 92X30, 100X200CM
+        rf'|{NUM}{UNIDAD}?\+{NUM}{UNIDAD}?'                  # combo: 256GB+12GB, 8+512GB
+        rf'|[LWHD]{NUM}(?:[*xX][LWHD]?{NUM}){{1,2}}'         # L100*W100, D140*H200
+        rf')$',
+        re.IGNORECASE
+    )
+
+    palabras_limpias = []
+    for palabra in t.split():
+        base = palabra.strip('.,;:()')
+        tiene_letra = any(c.isalpha() for c in base)
+        tiene_digito = any(c.isdigit() for c in base)
+        es_codigo_candidato = tiene_letra and tiene_digito and len(base) >= 5
+        if es_codigo_candidato and not patron_spec.match(base):
+            continue  # descartar: parece código de modelo/SKU, no un spec conocido
+        palabras_limpias.append(palabra)
+
+    resultado = ' '.join(palabras_limpias)
+    resultado = re.sub(r'\s{2,}', ' ', resultado).strip(' -,')
+
+    # Si al limpiar el código quedó la palabra "modelo" colgada sola al
+    # final (ej. "Lámpara decorativa modelo" — el código que la seguía se
+    # descartó arriba), se saca también: ningún nombre de producto real
+    # termina en la palabra suelta "modelo".
+    resultado = re.sub(r'\s+modelo$', '', resultado, flags=re.IGNORECASE).strip()
+
+    # Salvaguarda: si la limpieza dejó el texto vacío o casi vacío (ej. un
+    # producto cuyo nombre completo era un código), se devuelve el original
+    # para no perder la referencia del producto por completo.
+    if len(resultado) < 3:
+        return t
+    return resultado
+
 
 def buscar_coincidencia_tecnica(fila, universo_maestro):
     producto_campo = fila['Producto']
@@ -1653,6 +1736,14 @@ def generate_report():
             return prod
         df_filtered['PRODUCTO_CORRECTO'] = df_filtered.apply(append_promo_tag, axis=1)
 
+        # FIX (descripciones de producto, ajustado a pedido del cliente para
+        # calzar con los reportes que ya hacen a mano): se limpia el texto
+        # ACÁ, después de que ya se usó para buscar precio/marca/categoría y
+        # para decidir si es promo (todo eso ya quedó calculado en columnas
+        # separadas arriba) — así la limpieza nunca puede romper esas
+        # búsquedas internas, solo afecta lo que se ve en el reporte.
+        df_filtered['PRODUCTO_CORRECTO'] = df_filtered['PRODUCTO_CORRECTO'].apply(limpiar_descripcion_producto)
+
         df_filtered['ES_MARCA_PROPIA'] = df_filtered.apply(lambda r: is_own_brand(r['MARCA_MAESTRA'], empresa), axis=1)
         df_filtered['VENTA_PROMO'] = df_filtered['VENTA_TOTAL'].where(df_filtered['ES_PROMO'], 0.0)
         df_filtered['VENTA_FUERA_PROMO'] = df_filtered['VENTA_TOTAL'].where(~df_filtered['ES_PROMO'], 0.0)
@@ -2347,7 +2438,7 @@ def generate_report():
         # 1. Bar Chart of Promo, Fuera de Promo, Marcas
         chart_bar = BarChart()
         chart_bar.type = "col"
-        chart_bar.style = 10
+        chart_bar.style = 2
         chart_bar.title = f"{empresa_input.upper()} {sucursal.upper().replace('_', ' ')}"
         chart_bar.legend = None # No legend for single-series bar chart as in Imagen 1
         
@@ -2357,21 +2448,12 @@ def generate_report():
         chart_bar.add_data(data_bar, from_rows=True)
         chart_bar.set_categories(cats_bar)
         
-        # FIX (organización/estética de gráficas): antes las 3 barras (Promo,
-        # Fuera de Promo, Marcas) salían todas del mismo azul — no había
-        # forma de distinguirlas a simple vista, y encima el pie chart de
-        # abajo (que muestra el mismo par Promo/Fuera de Promo) sí usa
-        # naranja/azul diferenciado. Ahora el gráfico de barras usa esos
-        # mismos dos colores para Promo/Fuera de Promo (consistencia entre
-        # los dos gráficos que hablan de lo mismo) y un tercer color propio
-        # para Marcas, que es un dato distinto.
         from openpyxl.chart.series import DataPoint
-        colores_barras = ["ED7D31", "4472C4", "2E7D32"]  # Promo, Fuera de Promo, Marcas
-        serie_bar = chart_bar.series[0]
-        for idx, color in enumerate(colores_barras):
-            dp = DataPoint(idx=idx)
-            dp.graphicalProperties.solidFill = color
-            serie_bar.dPt.append(dp)
+        # NOTA (ajustado a pedido del cliente, para calzar exacto con el reporte
+        # de referencia que ya usan): las 3 barras van todas del mismo azul
+        # (accent1 del tema de Excel) — así es como sale en el reporte que
+        # hacen a mano, sin distinguir colores por barra. No se le agrega
+        # coloreado individual a propósito.
             
         # Remove gridlines
         chart_bar.y_axis.majorGridlines = None
@@ -2396,8 +2478,10 @@ def generate_report():
         chart_pie_promo.add_data(data_pie, from_rows=True)
         chart_pie_promo.set_categories(cats_pie)
         
-        # Assign individual slice colors: #ED7D31 (Promo) and #4472C4 (Fuera de Promo)
-        slice_colors = ["ED7D31", "4472C4"]
+        # Assign individual slice colors: #4472C4 (Promo) y #ED7D31 (Fuera de Promo)
+        # (ajustado a pedido del cliente — el reporte de referencia usa el azul
+        # para Promo y el naranja para Fuera de Promo, no al revés)
+        slice_colors = ["4472C4", "ED7D31"]
         series_pie = chart_pie_promo.series[0]
         for idx, color in enumerate(slice_colors):
             dp = DataPoint(idx=idx)
@@ -2424,16 +2508,16 @@ def generate_report():
         chart_pie_cat.add_data(data_cat, titles_from_data=True)
         chart_pie_cat.set_categories(cats_cat)
 
-        # FIX (organización/estética de gráficas): antes este gráfico no
-        # tenía colores propios (paleta por defecto de Excel, impredecible).
-        # Ahora cada categoría usa siempre el mismo color (CATEGORIA_COLORES,
-        # definido arriba en el archivo) sin importar el orden en que
-        # aparezcan las filas (df_t4 se ordena por venta, así que el orden
-        # cambia reporte a reporte) — se colorea por NOMBRE de categoría, no
-        # por posición.
+        # FIX (organización/estética de gráficas, ajustado a pedido del cliente):
+        # antes este gráfico no tenía colores propios (paleta por defecto de
+        # Excel, impredecible). Se probó primero con un color fijo por NOMBRE
+        # de categoría, pero el reporte de referencia usa los 6 colores de
+        # acento del tema por POSICIÓN en la tabla (que está ordenada por
+        # venta) — se replica ese comportamiento exacto acá, ciclando la
+        # paleta si hay más de 11 categorías con datos.
         series_cat = chart_pie_cat.series[0]
         for idx, row in df_t4.iterrows():
-            color = CATEGORIA_COLORES.get(row['Categoría'], COLOR_CATEGORIA_DEFAULT)
+            color = PALETA_CATEGORIAS_POSICION[idx % len(PALETA_CATEGORIAS_POSICION)]
             dp = DataPoint(idx=idx)
             dp.graphicalProperties.solidFill = color
             series_cat.dPt.append(dp)
@@ -2727,6 +2811,11 @@ def generate_observations():
                     return prod + " (PROMO)"
             return prod
         df_filtered['PRODUCTO_CORRECTO'] = df_filtered.apply(append_promo_tag, axis=1)
+
+        # FIX (descripciones de producto, mismo criterio que en /api/generate):
+        # limpiar acá, después de que ya se usó el texto crudo para las
+        # búsquedas internas (precio, marca, categoría, promo).
+        df_filtered['PRODUCTO_CORRECTO'] = df_filtered['PRODUCTO_CORRECTO'].apply(limpiar_descripcion_producto)
 
         df_filtered['VENTA_PROMO'] = df_filtered['VENTA_TOTAL'].where(df_filtered['ES_PROMO'], 0.0)
         df_filtered['VENTA_FUERA_PROMO'] = df_filtered['VENTA_TOTAL'].where(~df_filtered['ES_PROMO'], 0.0)
