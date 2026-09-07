@@ -1726,15 +1726,14 @@ def generate_report():
             return is_promo
             
         df_filtered['ES_PROMO'] = df_filtered.apply(apply_promo, axis=1)
-        
-        # Append " (PROMO)" to PRODUCTO_CORRECTO if ES_PROMO is True
-        def append_promo_tag(row):
-            prod = str(row['PRODUCTO_CORRECTO'])
-            if row['ES_PROMO']:
-                if not prod.endswith(" (PROMO)"):
-                    return prod + " (PROMO)"
-            return prod
-        df_filtered['PRODUCTO_CORRECTO'] = df_filtered.apply(append_promo_tag, axis=1)
+
+        # FIX (ajustado a pedido del cliente): antes se le agregaba " (PROMO)"
+        # directo al nombre del producto acá, lo que lo hacía aparecer tanto en
+        # "Datos Detallados" (la tabla de arriba, con una fila por venta) como
+        # en el Consolidado — repetido muchas veces para el mismo producto.
+        # Ahora "Datos Detallados" muestra el nombre limpio sin el tag, y el
+        # Consolidado (Tabla 2, más abajo) tiene su propia columna "PROMO"
+        # (SÍ/NO), calculada aparte a partir de ES_PROMO — ver esa sección.
 
         # FIX (descripciones de producto, ajustado a pedido del cliente para
         # calzar con los reportes que ya hacen a mano): se limpia el texto
@@ -1776,9 +1775,13 @@ def generate_report():
         df_t1 = pd.DataFrame(t1_data)
         
         # Table 2: Product sales consolidation
-        df_t2 = df_filtered.groupby(['PRODUCTO_CORRECTO', 'PRECIO_MAESTRO'])['Cantidad'].sum().reset_index()
+        df_t2 = df_filtered.groupby(['PRODUCTO_CORRECTO', 'PRECIO_MAESTRO']).agg(
+            Cantidad=('Cantidad', 'sum'),
+            ES_PROMO=('ES_PROMO', 'first')  # constante dentro del grupo (mismo producto+precio = mismo estado de promo)
+        ).reset_index()
         df_t2['Venta Total'] = df_t2['PRECIO_MAESTRO'] * df_t2['Cantidad']
-        df_t2.columns = ['Producto', 'Precio', 'Cantidad', 'Venta Total']
+        df_t2.columns = ['Producto', 'Precio', 'Cantidad', 'ES_PROMO', 'Venta Total']
+        df_t2 = df_t2[['Producto', 'Precio', 'Cantidad', 'Venta Total', 'ES_PROMO']]
         df_t2 = df_t2.sort_values(by='Cantidad', ascending=True).reset_index(drop=True)
         
         # Large sales discount
@@ -1845,12 +1848,12 @@ def generate_report():
         ws1.title = "EDM"
         ws1.views.sheetView[0].showGridLines = True
         
-        font_title = Font(name="Segoe UI", size=16, bold=True, color="1F497D")
-        font_subtitle = Font(name="Segoe UI", size=10, italic=True, color="595959")
-        font_header = Font(name="Segoe UI", size=11, bold=True, color="FFFFFF")
-        font_subtitles = Font(name="Segoe UI", size=11, bold=True, color="000000")
-        font_data = Font(name="Segoe UI", size=10)
-        font_bold = Font(name="Segoe UI", size=10, bold=True)
+        font_title = Font(name="Calibri", size=10, bold=True, color="1F497D")
+        font_subtitle = Font(name="Calibri", size=10, italic=True, color="595959")
+        font_header = Font(name="Calibri", size=10, bold=True, color="FFFFFF")
+        font_subtitles = Font(name="Calibri", size=10, bold=True, color="000000")
+        font_data = Font(name="Calibri", size=10)
+        font_bold = Font(name="Calibri", size=10, bold=True)
         
         fill_header = PatternFill(start_color="1F497D", end_color="1F497D", fill_type="solid")
         fill_zebra = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
@@ -1917,12 +1920,12 @@ def generate_report():
             start_slot_row = current_row
             
             if valid_sales.empty:
-                ws1.cell(row=current_row, column=3, value="-").alignment = Alignment(horizontal="left")
+                ws1.cell(row=current_row, column=3, value="-").alignment = Alignment(horizontal="center", vertical="center")
                 ws1.cell(row=current_row, column=4, value="")
                 ws1.cell(row=current_row, column=5, value="")
                 venta_cell = ws1.cell(row=current_row, column=6, value=0)
                 venta_cell.number_format = '$#,##0'
-                venta_cell.alignment = Alignment(horizontal="right")
+                venta_cell.alignment = Alignment(horizontal="center", vertical="center")
                 
                 # Apply cell styles
                 for col_idx in range(2, 8):
@@ -1939,18 +1942,18 @@ def generate_report():
             else:
                 for _, r_item in valid_sales.iterrows():
                     ws2_row = int(r_item['WS2_ROW'])
-                    ws1.cell(row=current_row, column=3, value=f"='Datos Detallados'!F{ws2_row}").alignment = Alignment(horizontal="left")
+                    ws1.cell(row=current_row, column=3, value=f"='Datos Detallados'!F{ws2_row}").alignment = Alignment(horizontal="center", vertical="center")
                     
                     price_cell = ws1.cell(row=current_row, column=4, value=f"='Datos Detallados'!I{ws2_row}")
                     price_cell.number_format = '$#,##0'
-                    price_cell.alignment = Alignment(horizontal="right")
+                    price_cell.alignment = Alignment(horizontal="center", vertical="center")
                     
                     qty_cell = ws1.cell(row=current_row, column=5, value=f"='Datos Detallados'!J{ws2_row}")
-                    qty_cell.alignment = Alignment(horizontal="center")
+                    qty_cell.alignment = Alignment(horizontal="center", vertical="center")
                     
                     venta_cell = ws1.cell(row=current_row, column=6, value=f"=ROUND(D{current_row}*E{current_row}, 0)")
                     venta_cell.number_format = '$#,##0'
-                    venta_cell.alignment = Alignment(horizontal="right")
+                    venta_cell.alignment = Alignment(horizontal="center", vertical="center")
                     
                     # Style cells
                     for col_idx in range(2, 8):
@@ -1987,7 +1990,7 @@ def generate_report():
         total_general_row = current_row
         ws1.merge_cells(start_row=total_general_row, start_column=2, end_row=total_general_row, end_column=4)
         ws1.cell(row=total_general_row, column=2, value="TOTAL GENERAL:").font = font_bold
-        ws1.cell(row=total_general_row, column=2).alignment = Alignment(horizontal="left", vertical="center")
+        ws1.cell(row=total_general_row, column=2).alignment = Alignment(horizontal="center", vertical="center")
         
         ws1.cell(row=total_general_row, column=5, value=f"=SUM(E{t1_start_row}:E{t1_end_hour_row})").font = font_bold
         ws1.cell(row=total_general_row, column=6, value=f"=SUM(F{t1_start_row}:F{t1_end_hour_row})").font = font_bold
@@ -2005,7 +2008,7 @@ def generate_report():
         tiempo_row = current_row
         ws1.merge_cells(start_row=tiempo_row, start_column=2, end_row=tiempo_row, end_column=4)
         ws1.cell(row=tiempo_row, column=2, value=f"PROYECCION EN TIEMPO DE {format_hour_12h(end_study)} A {format_hour_12h(limit_hour)} ({int(time_pct*100)}%)").font = font_data
-        ws1.cell(row=tiempo_row, column=2).alignment = Alignment(horizontal="left", vertical="center")
+        ws1.cell(row=tiempo_row, column=2).alignment = Alignment(horizontal="center", vertical="center")
         
         ws1.cell(row=tiempo_row, column=5, value=f"=ROUND(E{total_general_row} * {time_pct}, 0)").font = font_data
         ws1.cell(row=tiempo_row, column=6, value="-").font = font_data
@@ -2023,7 +2026,7 @@ def generate_report():
             ecommerce_row = current_row
             ws1.merge_cells(start_row=ecommerce_row, start_column=2, end_row=ecommerce_row, end_column=4)
             ws1.cell(row=ecommerce_row, column=2, value=f"VENTAS ECOMMERCE/DELIVERY ({int(ecommerce_pct*100)}%)").font = font_data
-            ws1.cell(row=ecommerce_row, column=2).alignment = Alignment(horizontal="left", vertical="center")
+            ws1.cell(row=ecommerce_row, column=2).alignment = Alignment(horizontal="center", vertical="center")
             
             ws1.cell(row=ecommerce_row, column=5, value=f"=ROUND(E{total_general_row} * {ecommerce_pct}, 0)").font = font_data
             ws1.cell(row=ecommerce_row, column=6, value="-").font = font_data
@@ -2040,7 +2043,7 @@ def generate_report():
             mayor_row = current_row
             ws1.merge_cells(start_row=mayor_row, start_column=2, end_row=mayor_row, end_column=4)
             ws1.cell(row=mayor_row, column=2, value=f"VENTAS AL MAYOR ({int(al_mayor_pct*100)}%)").font = font_data
-            ws1.cell(row=mayor_row, column=2).alignment = Alignment(horizontal="left", vertical="center")
+            ws1.cell(row=mayor_row, column=2).alignment = Alignment(horizontal="center", vertical="center")
             
             ws1.cell(row=mayor_row, column=5, value=f"=ROUND(E{total_general_row} * {al_mayor_pct}, 0)").font = font_data
             ws1.cell(row=mayor_row, column=6, value="-").font = font_data
@@ -2057,7 +2060,7 @@ def generate_report():
             novisibles_row = current_row
             ws1.merge_cells(start_row=novisibles_row, start_column=2, end_row=novisibles_row, end_column=4)
             ws1.cell(row=novisibles_row, column=2, value=f"VENTA DE PRODUCTOS NO VISIBLES ({int(no_visibles_pct*100)}%)").font = font_data
-            ws1.cell(row=novisibles_row, column=2).alignment = Alignment(horizontal="left", vertical="center")
+            ws1.cell(row=novisibles_row, column=2).alignment = Alignment(horizontal="center", vertical="center")
             
             ws1.cell(row=novisibles_row, column=5, value=f"=ROUND(E{total_general_row} * {no_visibles_pct}, 0)").font = font_data
             ws1.cell(row=novisibles_row, column=6, value="-").font = font_data
@@ -2074,7 +2077,7 @@ def generate_report():
             t1_total_proyectado_row = current_row
             ws1.merge_cells(start_row=t1_total_proyectado_row, start_column=2, end_row=t1_total_proyectado_row, end_column=4)
             ws1.cell(row=t1_total_proyectado_row, column=2, value="TOTAL PROYECTADO ARTICULOS Y VISITAS").font = font_bold
-            ws1.cell(row=t1_total_proyectado_row, column=2).alignment = Alignment(horizontal="left", vertical="center")
+            ws1.cell(row=t1_total_proyectado_row, column=2).alignment = Alignment(horizontal="center", vertical="center")
             
             ws1.cell(row=t1_total_proyectado_row, column=5, value=f"=E{total_general_row}+E{tiempo_row}+E{ecommerce_row}+E{mayor_row}+E{novisibles_row}").font = font_bold
             ws1.cell(row=t1_total_proyectado_row, column=6, value="-").font = font_bold
@@ -2092,7 +2095,7 @@ def generate_report():
             t1_total_proyectado_row = current_row
             ws1.merge_cells(start_row=t1_total_proyectado_row, start_column=2, end_row=t1_total_proyectado_row, end_column=4)
             ws1.cell(row=t1_total_proyectado_row, column=2, value="TOTAL PROYECTADO ARTICULOS Y VISITAS").font = font_bold
-            ws1.cell(row=t1_total_proyectado_row, column=2).alignment = Alignment(horizontal="left", vertical="center")
+            ws1.cell(row=t1_total_proyectado_row, column=2).alignment = Alignment(horizontal="center", vertical="center")
             
             ws1.cell(row=t1_total_proyectado_row, column=5, value=f"=E{total_general_row}+E{tiempo_row}").font = font_bold
             ws1.cell(row=t1_total_proyectado_row, column=6, value="-").font = font_bold
@@ -2175,8 +2178,8 @@ def generate_report():
         # --- TABLA 2: Consolidado de Ventas por Producto ---
         t2_title_row = current_row
         ws1.cell(row=t2_title_row, column=3, value=f"CONSOLIDADO EDM {empresa_input.upper()} {sucursal.upper().replace('_', ' ')}")
-        ws1.merge_cells(start_row=t2_title_row, start_column=3, end_row=t2_title_row, end_column=6)
-        for col_idx in range(3, 7):
+        ws1.merge_cells(start_row=t2_title_row, start_column=3, end_row=t2_title_row, end_column=7)
+        for col_idx in range(3, 8):
             c = ws1.cell(row=t2_title_row, column=col_idx)
             c.font = font_header
             c.fill = fill_header
@@ -2184,7 +2187,11 @@ def generate_report():
             c.alignment = Alignment(horizontal="center", vertical="center")
         ws1.row_dimensions[t2_title_row].height = 26
         
-        headers_t2 = ['DESCRIPCION', 'PRECIO', 'CANTIDAD', 'VENTA T']
+        # FIX (ajustado a pedido del cliente): columna "PROMO" propia en el
+        # consolidado, en vez de agregar "(PROMO)" al nombre del producto
+        # (eso rompía la fórmula de SUMIF de la columna Cantidad, que
+        # depende de que el nombre calce exacto con "Datos Detallados").
+        headers_t2 = ['DESCRIPCION', 'PRECIO', 'CANTIDAD', 'VENTA T', 'PROMO']
         for col_idx, h in enumerate(headers_t2, start=3):
             cell = ws1.cell(row=t2_title_row+1, column=col_idx, value=h)
             cell.font = font_subtitles
@@ -2207,13 +2214,14 @@ def generate_report():
             p_name = row['Producto']
             ws2_row = prod_to_row_idx.get(p_name, 2)
             
-            ws1.cell(row=r_idx, column=3, value=f"='Datos Detallados'!F{ws2_row}").alignment = Alignment(horizontal="left")
+            ws1.cell(row=r_idx, column=3, value=f"='Datos Detallados'!F{ws2_row}").alignment = Alignment(horizontal="center", vertical="center")
             ws1.cell(row=r_idx, column=4, value=f"='Datos Detallados'!I{ws2_row}").number_format = '$#,##0'
-            ws1.cell(row=r_idx, column=4).alignment = Alignment(horizontal="right")
-            ws1.cell(row=r_idx, column=5, value=f"=SUMIF('Datos Detallados'!F$2:F${raw_last_row}, C{r_idx}, 'Datos Detallados'!J$2:J${raw_last_row})").alignment = Alignment(horizontal="right")
+            ws1.cell(row=r_idx, column=4).alignment = Alignment(horizontal="center", vertical="center")
+            ws1.cell(row=r_idx, column=5, value=f"=SUMIF('Datos Detallados'!F$2:F${raw_last_row}, C{r_idx}, 'Datos Detallados'!J$2:J${raw_last_row})").alignment = Alignment(horizontal="center", vertical="center")
             ws1.cell(row=r_idx, column=6, value=f"=ROUND(D{r_idx} * E{r_idx}, 0)").number_format = '$#,##0'
-            ws1.cell(row=r_idx, column=6).alignment = Alignment(horizontal="right")
-            for col_idx in range(3, 7):
+            ws1.cell(row=r_idx, column=6).alignment = Alignment(horizontal="center", vertical="center")
+            ws1.cell(row=r_idx, column=7, value="SÍ" if row['ES_PROMO'] else "NO").alignment = Alignment(horizontal="center", vertical="center")
+            for col_idx in range(3, 8):
                 c = ws1.cell(row=r_idx, column=col_idx)
                 c.font = font_data
                 c.border = thin_border
@@ -2350,7 +2358,7 @@ def generate_report():
         for col_idx in range(9, 13):
             c = ws1.cell(row=4, column=col_idx)
             c.font = font_bold
-            c.alignment = Alignment(horizontal="right")
+            c.alignment = Alignment(horizontal="center", vertical="center")
             c.border = thin_border
             c.fill = fill_zebra
         ws1.row_dimensions[4].height = 22
@@ -2378,9 +2386,9 @@ def generate_report():
         data_start_t4 = 4
         for idx, row in df_t4.iterrows():
             r_idx = data_start_t4 + idx
-            ws1.cell(row=r_idx, column=14, value=row['Categoría']).alignment = Alignment(horizontal="left")
+            ws1.cell(row=r_idx, column=14, value=row['Categoría']).alignment = Alignment(horizontal="center", vertical="center")
             ws1.cell(row=r_idx, column=15, value=f"=SUMIF('Datos Detallados'!H$2:H${raw_last_row}, N{r_idx}, 'Datos Detallados'!K$2:K${raw_last_row})").number_format = '$#,##0'
-            ws1.cell(row=r_idx, column=15).alignment = Alignment(horizontal="right")
+            ws1.cell(row=r_idx, column=15).alignment = Alignment(horizontal="center", vertical="center")
             for col_idx in range(14, 16):
                 c = ws1.cell(row=r_idx, column=col_idx)
                 c.font = font_bold if col_idx == 14 else font_data
@@ -2548,24 +2556,24 @@ def generate_report():
             cell = ws2.cell(row=1, column=col_idx, value=h)
             cell.font = font_header
             cell.fill = fill_header
-            cell.alignment = Alignment(horizontal="center")
+            cell.alignment = Alignment(horizontal="center", vertical="center")
         ws2.row_dimensions[1].height = 24
         
         raw_row_idx = 2
         for idx, row in df_filtered.iterrows():
-            ws2.cell(row=raw_row_idx, column=1, value=row['ID_Envio']).alignment = Alignment(horizontal="center")
-            ws2.cell(row=raw_row_idx, column=2, value=row['Fecha']).alignment = Alignment(horizontal="center")
-            ws2.cell(row=raw_row_idx, column=3, value=formatear_horario_lindo(row['Horario'])).alignment = Alignment(horizontal="center")
-            ws2.cell(row=raw_row_idx, column=4, value=row['Producto']).alignment = Alignment(horizontal="left")
-            ws2.cell(row=raw_row_idx, column=5, value=row['Marca']).alignment = Alignment(horizontal="left")
-            ws2.cell(row=raw_row_idx, column=6, value=row['PRODUCTO_CORRECTO']).alignment = Alignment(horizontal="left")
-            ws2.cell(row=raw_row_idx, column=7, value=row['MARCA_MAESTRA']).alignment = Alignment(horizontal="left")
-            ws2.cell(row=raw_row_idx, column=8, value=row['CATEGORIA']).alignment = Alignment(horizontal="left")
+            ws2.cell(row=raw_row_idx, column=1, value=row['ID_Envio']).alignment = Alignment(horizontal="center", vertical="center")
+            ws2.cell(row=raw_row_idx, column=2, value=row['Fecha']).alignment = Alignment(horizontal="center", vertical="center")
+            ws2.cell(row=raw_row_idx, column=3, value=formatear_horario_lindo(row['Horario'])).alignment = Alignment(horizontal="center", vertical="center")
+            ws2.cell(row=raw_row_idx, column=4, value=row['Producto']).alignment = Alignment(horizontal="center", vertical="center")
+            ws2.cell(row=raw_row_idx, column=5, value=row['Marca']).alignment = Alignment(horizontal="center", vertical="center")
+            ws2.cell(row=raw_row_idx, column=6, value=row['PRODUCTO_CORRECTO']).alignment = Alignment(horizontal="center", vertical="center")
+            ws2.cell(row=raw_row_idx, column=7, value=row['MARCA_MAESTRA']).alignment = Alignment(horizontal="center", vertical="center")
+            ws2.cell(row=raw_row_idx, column=8, value=row['CATEGORIA']).alignment = Alignment(horizontal="center", vertical="center")
             ws2.cell(row=raw_row_idx, column=9, value=round_half_up(float(row['PRECIO_MAESTRO']))).number_format = '$#,##0'
-            ws2.cell(row=raw_row_idx, column=9).alignment = Alignment(horizontal="right")
-            ws2.cell(row=raw_row_idx, column=10, value=int(row['Cantidad'])).alignment = Alignment(horizontal="right")
+            ws2.cell(row=raw_row_idx, column=9).alignment = Alignment(horizontal="center", vertical="center")
+            ws2.cell(row=raw_row_idx, column=10, value=int(row['Cantidad'])).alignment = Alignment(horizontal="center", vertical="center")
             ws2.cell(row=raw_row_idx, column=11, value=f"=ROUND(I{raw_row_idx} * J{raw_row_idx}, 0)").number_format = '$#,##0'
-            ws2.cell(row=raw_row_idx, column=11).alignment = Alignment(horizontal="right")
+            ws2.cell(row=raw_row_idx, column=11).alignment = Alignment(horizontal="center", vertical="center")
             
             fact_val = row['Factura']
             if not pd.isna(fact_val):
@@ -2573,12 +2581,12 @@ def generate_report():
                     fact_val = int(float(fact_val))
                 except Exception:
                     pass
-            ws2.cell(row=raw_row_idx, column=12, value=fact_val).alignment = Alignment(horizontal="center")
-            ws2.cell(row=raw_row_idx, column=13, value=row['Visitas']).alignment = Alignment(horizontal="center")
-            ws2.cell(row=raw_row_idx, column=14, value="SÍ" if row['ES_PROMO'] else "NO").alignment = Alignment(horizontal="center")
-            ws2.cell(row=raw_row_idx, column=15, value="SÍ" if row['ES_MARCA_PROPIA'] else "NO").alignment = Alignment(horizontal="center")
+            ws2.cell(row=raw_row_idx, column=12, value=fact_val).alignment = Alignment(horizontal="center", vertical="center")
+            ws2.cell(row=raw_row_idx, column=13, value=row['Visitas']).alignment = Alignment(horizontal="center", vertical="center")
+            ws2.cell(row=raw_row_idx, column=14, value="SÍ" if row['ES_PROMO'] else "NO").alignment = Alignment(horizontal="center", vertical="center")
+            ws2.cell(row=raw_row_idx, column=15, value="SÍ" if row['ES_MARCA_PROPIA'] else "NO").alignment = Alignment(horizontal="center", vertical="center")
             ws2.cell(row=raw_row_idx, column=16, value=round_half_up(float(row['VENTA_PROYECTADA']))).number_format = '$#,##0'
-            ws2.cell(row=raw_row_idx, column=16).alignment = Alignment(horizontal="right")
+            ws2.cell(row=raw_row_idx, column=16).alignment = Alignment(horizontal="center", vertical="center")
             
             for col_idx in range(1, 17):
                 c = ws2.cell(row=raw_row_idx, column=col_idx)
@@ -2646,17 +2654,17 @@ def generate_report():
                 
                 # Write each product
                 for i, (_, item) in enumerate(invoice_items.iterrows()):
-                    ws_desc.cell(row=row_idx, column=2, value=item['PRODUCTO_CORRECTO']).alignment = Alignment(horizontal="left")
+                    ws_desc.cell(row=row_idx, column=2, value=item['PRODUCTO_CORRECTO']).alignment = Alignment(horizontal="center", vertical="center")
                     price_cell = ws_desc.cell(row=row_idx, column=3, value=round_half_up(float(item['PRECIO_MAESTRO'])))
                     price_cell.number_format = '$#,##0'
-                    price_cell.alignment = Alignment(horizontal="right")
+                    price_cell.alignment = Alignment(horizontal="center", vertical="center")
                     
                     qty_cell = ws_desc.cell(row=row_idx, column=4, value=int(item['Cantidad']))
-                    qty_cell.alignment = Alignment(horizontal="center")
+                    qty_cell.alignment = Alignment(horizontal="center", vertical="center")
                     
                     venta_cell = ws_desc.cell(row=row_idx, column=5, value=f"=C{row_idx}*D{row_idx}")
                     venta_cell.number_format = '$#,##0'
-                    venta_cell.alignment = Alignment(horizontal="right")
+                    venta_cell.alignment = Alignment(horizontal="center", vertical="center")
                     
                     # Style cells
                     for col in range(1, 6):
@@ -2680,10 +2688,10 @@ def generate_report():
                     ws_desc.cell(row=r, column=1).border = thin_border
                 
                 # Totalizer row for this invoice
-                ws_desc.cell(row=row_idx, column=4, value="TOTALIZA:").alignment = Alignment(horizontal="right")
+                ws_desc.cell(row=row_idx, column=4, value="TOTALIZA:").alignment = Alignment(horizontal="center", vertical="center")
                 tot_formula = ws_desc.cell(row=row_idx, column=5, value=f"=SUM(E{start_row}:E{end_row})")
                 tot_formula.number_format = '$#,##0'
-                tot_formula.alignment = Alignment(horizontal="right")
+                tot_formula.alignment = Alignment(horizontal="center", vertical="center")
                 
                 totalizer_rows.append(row_idx)
                 
@@ -2718,7 +2726,7 @@ def generate_report():
             gt_val.fill = fill_grand_total
             gt_val.border = double_bottom_border
             gt_val.number_format = '$#,##0'
-            gt_val.alignment = Alignment(horizontal="right")
+            gt_val.alignment = Alignment(horizontal="center", vertical="center")
             
             ws_desc.row_dimensions[row_idx].height = 22
             

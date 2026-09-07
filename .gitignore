@@ -28,7 +28,10 @@ Thumbs.db
 # Legacy or obsolete files
 df_maestro_0_cache.csv
 
+# Datos reales de negocio - no van a un repo publico
 df_campo_cache.csv
 df_maestro_*_cache.csv
+
+# Credenciales y configuracion sensible
 users.json
 parametros.json
