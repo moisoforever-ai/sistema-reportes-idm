@@ -1628,6 +1628,65 @@ def admin_parametros():
 
     return render_template('admin_parametros.html', parametros=parametros, error=error, success=success)
 
+@app.route('/admin/exportar_catalogo_kobo', methods=['GET'])
+def exportar_catalogo_kobo():
+    """
+    Genera el archivo productos_catalogo.csv que usa el selector de productos
+    del formulario de Kobo (select_one_from_file), a partir de los datos
+    MAS RECIENTES de la lista maestra (fuerza sincronización con Google
+    Sheets, no usa la caché de 10 minutos) — para que el catálogo que ven
+    los freelancers en Kobo no se desactualice con el tiempo.
+
+    Uso: descargar este archivo y volver a subirlo en la pestaña "Media" del
+    proyecto de Kobo (mismo nombre exacto: productos_catalogo.csv), después
+    Redeploy. Ver LEEME del formulario para el detalle completo.
+    """
+    if not is_logged_in():
+        return redirect(url_for('login_page'))
+    if not is_admin():
+        return redirect(url_for('home'))
+
+    filas = []
+    empresas_gid = [('ddaka', GID_BASE_DAKA), ('ddamasco', GID_BASE_DAMASCO), ('mmultimax', GID_BASE_MULTIMAX)]
+    errores = []
+    for empresa_code, gid_base in empresas_gid:
+        try:
+            _, df_maestro = fetch_data(gid_base, force_sync=True)
+        except Exception as e:
+            app.logger.warning(f"Error al exportar catálogo Kobo para {empresa_code}: {e}")
+            errores.append(empresa_code)
+            continue
+        df_maestro = df_maestro.drop_duplicates(subset=['PRODUCTO', 'PRECIO DE REFERENCIA'])
+        for _, row in df_maestro.iterrows():
+            producto = str(row['PRODUCTO']).strip()
+            precio_raw = str(row['PRECIO DE REFERENCIA']).replace(' ', '').replace(',', '.')
+            try:
+                precio = float(precio_raw)
+                precio_str = f"${precio:,.0f}"
+            except ValueError:
+                precio_str = ''
+            label = f"{producto} — {precio_str}" if precio_str else producto
+            filas.append({'name': producto, 'label': label, 'empresa': empresa_code})
+
+    if not filas:
+        return "No se pudo obtener la lista maestra de ninguna empresa (revisá la conexión a Google Sheets). Nada para exportar.", 502
+
+    df_final = pd.DataFrame(filas)
+    output = io.StringIO()
+    df_final.to_csv(output, index=False)
+    csv_bytes = io.BytesIO(output.getvalue().encode('utf-8'))
+    csv_bytes.seek(0)
+
+    respuesta = send_file(
+        csv_bytes,
+        mimetype="text/csv",
+        as_attachment=True,
+        download_name="productos_catalogo.csv"
+    )
+    if errores:
+        respuesta.headers['X-Empresas-Con-Error'] = ','.join(errores)
+    return respuesta
+
 # --- API ENDPOINTS ---
 @app.route('/')
 def home():
