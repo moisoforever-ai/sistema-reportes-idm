@@ -441,6 +441,11 @@ def obtener_grupos_palabras_clave(texto_limpio):
         # personal.
         ['secador de cabello', 'secador cabello', 'cepillo secador', 'secador'],
         ['secadora', 'secadora de ropa', 'secadoras'],
+        # FIX (matching, sesión 12): mismo criterio — "hidrojet"/"hydrojet" no
+        # tenía grupo propio, así que dentro del cajón grande de
+        # "ELECTRODOMESTICOS" terminaba calzando con cualquier cosa (una
+        # cacerola, un aire acondicionado).
+        ['hidrojet', 'hydrojet', 'hidro jet'],
     ]
     matched_group_indices = []
     for idx, g in enumerate(groups):
@@ -705,13 +710,13 @@ def categorizar_producto(nombre_producto):
     elif any(k in nombre for k in ['congelador', 'freezer']):
         return 'CONGELADOR'
     # 5. NEVERA
-    elif any(k in nombre for k in ['refrigerador', 'nevera']):
+    elif any(k in nombre for k in ['refrigerador', 'refigerador', 'nevera']):
         return 'NEVERA'
     # 6. COCINA
     elif any(k in nombre for k in ['tope a gas', 'tope electrico', 'tope dual', 'cocina a gas', 'campana', 'estufa', 'cocina', 'sarten', 'cubierto', 'vajilla', 'plato', 'vaso', 'utensilio']) or ('olla' in nombre and 'arrocera' not in nombre):
         return 'COCINA'
     # 7. COMPUTACION
-    elif any(k in nombre for k in ['laptop', 'computadora', 'monitor', 'auriculares', 'audifonos', 'audifono', 'teclado', 'mouse', 'raton', 'router', 'modem']) or contains_word(nombre, 'pc') or contains_word(nombre, 'ups'):
+    elif any(k in nombre for k in ['laptop', 'computadora', 'monitor', 'auriculares', 'audifonos', 'audifono', 'teclado', 'mouse', 'raton', 'router', 'modem', 'tablet', 'tableta']) or contains_word(nombre, 'pc') or contains_word(nombre, 'ups'):
         if any(x in nombre for x in ['morral', 'bolso', 'mochila', 'funda']):
             return 'OTROS'
         return 'COMPUTACION'
@@ -728,7 +733,7 @@ def categorizar_producto(nombre_producto):
         'extractor', 'exprimidor', 'multiolla', 'instant pot', 'parrilla', 'parrillera', 'panini', 'afilador', 'balanza',
         'plancha', 'aspiradora', 'secador', 'rizador', 'rasuradora', 'recortadora', 'cepillo de dientes',
         'ventilador', 'humificador', 'humidificador', 'picatodo', 'crepera', 'deshidratador', 'cotufera',
-        'espumador', 'yogurtera', 'hidrojet', 'microonda', 'olla de presion', 'olla presion',
+        'espumador', 'yogurtera', 'hidrojet', 'hydrojet', 'microonda', 'olla de presion', 'olla presion',
         'dispensador', 'horno tostador', 'horno electrico', 'horno freidora', 'horno freidor', 'tosta horno'
     ]):
         return 'ELECTRODOMESTICOS'
@@ -2195,8 +2200,14 @@ def generate_report():
         nfp_val_cell = ws1.cell(row=nfp_row, column=6, value=f"=F{tf_row}+F{pt_row}")
         nfp_val_cell.font = font_bold
         nfp_val_cell.alignment = Alignment(horizontal="center", vertical="center")
-        for col_idx in range(2, 8):
-            ws1.cell(row=nfp_row, column=col_idx).border = no_border
+        # FIX (a pedido del cliente, ver foto de referencia sesión 12): esta
+        # fila lleva un recuadro completo, a diferencia de las otras 3 de
+        # este bloque que no tienen borde — así se ve en el reporte de
+        # referencia que mandó el cliente.
+        recuadro_lado = Side(style='thin', color='000000')
+        recuadro = Border(top=recuadro_lado, bottom=recuadro_lado, left=recuadro_lado, right=recuadro_lado)
+        for col_idx in range(3, 7):
+            ws1.cell(row=nfp_row, column=col_idx).border = recuadro
         current_row += 1
         
         # 4. EFECTIVIDAD
@@ -2217,8 +2228,8 @@ def generate_report():
         # --- TABLA 2: Consolidado de Ventas por Producto ---
         t2_title_row = current_row
         ws1.cell(row=t2_title_row, column=3, value=f"CONSOLIDADO EDM {empresa_input.upper()} {sucursal.upper().replace('_', ' ')}")
-        ws1.merge_cells(start_row=t2_title_row, start_column=3, end_row=t2_title_row, end_column=7)
-        for col_idx in range(3, 8):
+        ws1.merge_cells(start_row=t2_title_row, start_column=3, end_row=t2_title_row, end_column=6)
+        for col_idx in range(3, 7):
             c = ws1.cell(row=t2_title_row, column=col_idx)
             c.font = font_header
             c.fill = fill_header
@@ -2226,11 +2237,10 @@ def generate_report():
             c.alignment = Alignment(horizontal="center", vertical="center")
         ws1.row_dimensions[t2_title_row].height = 26
         
-        # FIX (ajustado a pedido del cliente): columna "PROMO" propia en el
-        # consolidado, en vez de agregar "(PROMO)" al nombre del producto
-        # (eso rompía la fórmula de SUMIF de la columna Cantidad, que
-        # depende de que el nombre calce exacto con "Datos Detallados").
-        headers_t2 = ['DESCRIPCION', 'PRECIO', 'CANTIDAD', 'VENTA T', 'PROMO']
+        # FIX (a pedido del cliente, sesión 12): se sacó la columna "PROMO"
+        # (SÍ/NO) — ya no hace falta, el tag "(PROMO)" en el nombre del
+        # producto (ver más abajo) alcanza.
+        headers_t2 = ['DESCRIPCION', 'PRECIO', 'CANTIDAD', 'VENTA T']
         for col_idx, h in enumerate(headers_t2, start=3):
             cell = ws1.cell(row=t2_title_row+1, column=col_idx, value=h)
             cell.font = font_subtitles
@@ -2253,10 +2263,8 @@ def generate_report():
             p_name = row['Producto']
             ws2_row = prod_to_row_idx.get(p_name, 2)
 
-            # FIX (a pedido del cliente, ver bitácora sesión 11): además de la
-            # columna "PROMO" (SÍ/NO), ahora el nombre del producto en el
-            # consolidado también muestra "(PROMO)" al final cuando aplica —
-            # ej. "TV 43 DAMASCO SMART TV (PROMO)". El SUMIF de la columna
+            # El nombre del producto muestra "(PROMO)" al final cuando aplica
+            # — ej. "TV 43 DAMASCO SMART TV (PROMO)". El SUMIF de la columna
             # Cantidad ya NO usa la celda C{r_idx} como criterio (si lo
             # hiciera, "(PROMO)" quedaría pegado al texto que se busca en
             # "Datos Detallados", que no lo tiene, y la suma daría 0) — en
@@ -2274,8 +2282,7 @@ def generate_report():
             ws1.cell(row=r_idx, column=5, value=f'=SUMIF(\'Datos Detallados\'!F$2:F${raw_last_row}, "{criteria_escaped}", \'Datos Detallados\'!J$2:J${raw_last_row})').alignment = Alignment(horizontal="center", vertical="center")
             ws1.cell(row=r_idx, column=6, value=f"=ROUND(D{r_idx} * E{r_idx}, 0)").number_format = '$#,##0'
             ws1.cell(row=r_idx, column=6).alignment = Alignment(horizontal="center", vertical="center")
-            ws1.cell(row=r_idx, column=7, value="SÍ" if row['ES_PROMO'] else "NO").alignment = Alignment(horizontal="center", vertical="center")
-            for col_idx in range(3, 8):
+            for col_idx in range(3, 7):
                 c = ws1.cell(row=r_idx, column=col_idx)
                 c.font = font_data
                 c.border = thin_border
