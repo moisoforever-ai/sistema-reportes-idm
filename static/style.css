@@ -1,29 +1,30 @@
 /* ============================================================
    Sistema de Reportes — IDM
-   Dirección: "ficha de campo / ledger de auditoría" — tinta cálida,
-   un solo acento ámbar (resaltador de precio), datos en monoespaciada.
+   Paleta de azules (Oxford Blue → Lavender), a pedido del cliente
+   (sesión 12) — reemplaza la dirección "ficha de campo" ámbar anterior.
    ============================================================ */
 
 :root {
-    /* Superficies — tinta cálida, no azul-marino genérico */
-    --bg: #17140f;
-    --surface: #211c15;
-    --surface-2: #2a2318;
-    --surface-3: #332b1d;
-    --border: rgba(232, 217, 188, 0.12);
-    --border-strong: rgba(232, 217, 188, 0.22);
+    /* Superficies — familia de azules, de más oscuro a más claro */
+    --bg: #192338;          /* Oxford Blue */
+    --surface: #1E2E4F;     /* Space Cadet */
+    --surface-2: #273A62;   /* entre Space Cadet y YInMn Blue */
+    --surface-3: #2E4474;   /* cerca de YInMn Blue */
+    --border: rgba(143, 179, 226, 0.16);
+    --border-strong: rgba(143, 179, 226, 0.30);
 
     /* Texto */
-    --text-primary: #f3ede0;
-    --text-secondary: #a99a80;
-    --text-muted: #7d715c;
+    --text-primary: #D9E1F1;   /* Lavender (web) */
+    --text-secondary: #8FB3E2; /* Jordy Blue */
+    --text-muted: #526D9E;     /* entre YInMn Blue y Jordy Blue */
 
-    /* Acento único: ámbar / resaltador de precio */
-    --accent: #e2a33b;
-    --accent-strong: #f0b955;
-    --accent-ink: #3a2a10;
+    /* Acento único: Jordy Blue */
+    --accent: #8FB3E2;
+    --accent-strong: #B4CAEA;
+    --accent-ink: #1E2E4F;
 
-    /* Estados */
+    /* Estados (se mantienen verde/rojo — cumplen una función de
+       lectura rápida bueno/malo que la paleta monocromática no cubre) */
     --positive: #6fa287;
     --positive-bg: rgba(111, 162, 135, 0.12);
     --negative: #c1553d;
@@ -48,8 +49,8 @@
 body {
     background-color: var(--bg);
     background-image:
-        linear-gradient(rgba(232, 217, 188, 0.035) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(232, 217, 188, 0.035) 1px, transparent 1px);
+        linear-gradient(rgba(217, 225, 241, 0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(217, 225, 241, 0.04) 1px, transparent 1px);
     background-size: 32px 32px;
     color: var(--text-primary);
     font-family: var(--font-sans);
@@ -240,7 +241,7 @@ select {
 
 select:focus, input[type="time"]:focus {
     border-color: var(--accent);
-    box-shadow: 0 0 0 3px rgba(226, 163, 59, 0.15);
+    box-shadow: 0 0 0 3px rgba(143, 179, 226, 0.20);
 }
 
 select:disabled {
@@ -318,7 +319,7 @@ option {
 
 .btn-submit {
     background: var(--accent);
-    color: #221704;
+    color: #14213A;
     border: 1px solid var(--accent);
 }
 
@@ -339,9 +340,9 @@ option {
 .small-spinner {
     width: 16px;
     height: 16px;
-    border: 2px solid rgba(34, 23, 4, 0.25);
+    border: 2px solid rgba(20, 33, 58, 0.25);
     border-radius: 50%;
-    border-top-color: #221704;
+    border-top-color: #14213A;
     animation: spin 0.8s linear infinite;
 }
 
@@ -497,7 +498,7 @@ input[type="password"]:focus,
 input[type="number"]:focus {
     border-color: var(--accent);
     outline: none;
-    box-shadow: 0 0 0 3px rgba(226, 163, 59, 0.15);
+    box-shadow: 0 0 0 3px rgba(143, 179, 226, 0.20);
 }
 
 /* ---------- Error / success banner (login, admin) ---------- */

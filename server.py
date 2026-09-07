@@ -206,19 +206,27 @@ GID_BASE_MULTIMAX = "2089283830"
 # (que está ordenada por venta descendente), repitiendo con una variante más
 # oscura para las categorías 7 en adelante. Se replican acá los valores hex
 # exactos (calculados a partir del tema real de un archivo de referencia).
+#
+# ACTUALIZADO (sesión 12, a pedido del cliente): se reemplazó por la paleta de
+# 5 azules que mandó (Oxford Blue → Lavender), aplicada tanto acá como en el
+# sistema web. Esto se aparta a propósito del color exacto del reporte manual
+# de referencia (sesión 9) — fue una decisión consciente confirmada con el
+# cliente, no un olvido de esa calibración anterior. Se cicla cada 5
+# categorías para los casos con más de 5 categorías con ventas ese día.
 PALETA_CATEGORIAS_POSICION = [
-    "4472C4",  # accent1 - azul
-    "ED7D31",  # accent2 - naranja
-    "A5A5A5",  # accent3 - gris
-    "FFC000",  # accent4 - dorado
-    "5B9BD5",  # accent5 - celeste
-    "70AD47",  # accent6 - verde
-    "264478",  # accent1 oscuro (lumMod 60%)
-    "9E480E",  # accent2 oscuro
-    "636363",  # accent3 oscuro
-    "997300",  # accent4 oscuro
-    "255E91",  # accent5 oscuro
+    "192338",  # Oxford Blue
+    "1E2E4F",  # Space Cadet
+    "31487A",  # YInMn Blue
+    "8FB3E2",  # Jordy Blue
+    "D9E1F1",  # Lavender (web)
 ]
+
+# Colores individuales de la nueva paleta, para los otros 2 gráficos (barras
+# y pie Promo/Fuera de Promo) — mismo criterio: familia de azules, no colores
+# sueltos sin relación.
+COLOR_ACCENT_PRINCIPAL = "31487A"   # YInMn Blue — color único de las barras (Promo/Fuera de Promo/Marcas)
+COLOR_PROMO = "192338"              # Oxford Blue — porción "Promo" del pie
+COLOR_FUERA_PROMO = "8FB3E2"        # Jordy Blue — porción "Fuera de Promo" del pie
 
 # --- DATA URLS ---
 URL_TIPIFICACIONES = f"https://docs.google.com/spreadsheets/d/e/2PACX-1vTfq81DhLQ_8jkbFIAs7OWaO7qkYRis350TTRz_BbbsVucVw4K87Ai0YgiynRIQG1CqRJv9i1V6oEDo/pub?gid={GID_TIPIFICACIONES}&single=true&output=csv"
@@ -290,9 +298,15 @@ def estandarizar_texto(texto):
     t = t.replace("pulgadas", ' pulg ').replace("pulgada", ' pulg ').replace(" pulg", ' pulg ').replace("pulg", ' pulg ')
 
     # Synonyms mapping
-    t = t.replace("tosty arepa", "tostiarepa")\
-         .replace("tostyarepa", "tostiarepa")\
-         .replace("reloj inteligente", "reloj smart")\
+    # FIX (matching, encontrado durante la revisión de la sesión 11): antes
+    # solo cubría "tosty arepa" exacto — no el plural ("arepas", como lo
+    # escribió el freelance real) ni la variante con "i" ("tosti"). Eso hacía
+    # que la consulta no se reconociera como el mismo grupo de palabras clave
+    # que el producto real, y terminaba sin match en vez de encontrar la
+    # tostiarepa real. Se usa un regex para cubrir todas las variantes de una
+    # vez (tosti/tosty, con o sin espacio, singular o plural).
+    t = re.sub(r'tost[iy]\s*arepa[s]?', 'tostiarepa', t)
+    t = t.replace("reloj inteligente", "reloj smart")\
          .replace("relojes inteligentes", "relojes smart")
          
     t = t.replace("airfryer", "freidora de aire")\
@@ -392,6 +406,16 @@ def obtener_grupos_palabras_clave(texto_limpio):
         ['olla', 'arrocera', 'multiolla', 'instant pot'],
         ['ventilador'],
         ['plancha'],
+        # FIX (matching, a pedido del cliente — ver bitácora sesión 11): antes
+        # "plancha" era un solo grupo genérico, así que una "plancha de ropa"
+        # (plancha a vapor) podía calzar con una "plancha de cabello" y
+        # viceversa. Se agregan dos grupos específicos aparte del genérico de
+        # arriba, para que una consulta que sí distingue "ropa" de "cabello"
+        # solo pueda calzar con esa variante — una consulta ambigua ("plancha"
+        # a secas) sigue usando solo el grupo genérico, sin forzar ninguna de
+        # las dos.
+        ['plancha de ropa', 'plancha ropa', 'plancha a vapor', 'plancha vapor'],
+        ['plancha de cabello', 'plancha cabello', 'plancha para cabello', 'alaciadora', 'planchita de cabello'],
         ['exprimidor', 'extractor'],
         ['batidora'],
         ['picatodo', 'picadora', 'procesador'],
@@ -401,7 +425,22 @@ def obtener_grupos_palabras_clave(texto_limpio):
         ['aire', 'split', 'pisotecho', 'a/a'],
         ['dispensador'],
         ['corneta', 'altavoz', 'parlante', 'sonido'],
-        ['base', 'soporte']
+        ['base', 'soporte'],
+        # FIX (matching, a pedido del cliente — ver bitácora sesión 11):
+        # "secador"/"cepillo secador" (secado de cabello) no estaba en
+        # ningún grupo, así que terminaba calzando con cosas sin relación
+        # (una licuadora). La solución "a nivel general" que funcionó fue
+        # darle su propio grupo específico — se probó también endurecer el
+        # filtro para bloquear cualquier término no reconocido (no solo
+        # este caso puntual), pero eso rompía otros matches que sí andaban
+        # bien por otras razones (ej. un TV se dejaba de encontrar por un
+        # hueco de categorización no relacionado) — se descartó esa versión
+        # más agresiva a favor de esta, más quirúrgica y sin ese riesgo.
+        # "secadora" (de ropa) queda en su propio grupo aparte, para no
+        # confundir el electrodoméstico de lavandería con el de cuidado
+        # personal.
+        ['secador de cabello', 'secador cabello', 'cepillo secador', 'secador'],
+        ['secadora', 'secadora de ropa', 'secadoras'],
     ]
     matched_group_indices = []
     for idx, g in enumerate(groups):
@@ -943,7 +982,7 @@ def buscar_coincidencia_tecnica(fila, universo_maestro):
             if score > mejor_puntaje:
                 mejor_puntaje = score
                 mejor_opcion = opcion['original']
-                
+
         return mejor_opcion, mejor_puntaje
 
     # 1. Intentar primero filtrando estrictamente por marca
@@ -2213,11 +2252,26 @@ def generate_report():
             r_idx = t2_data_start + idx
             p_name = row['Producto']
             ws2_row = prod_to_row_idx.get(p_name, 2)
-            
-            ws1.cell(row=r_idx, column=3, value=f"='Datos Detallados'!F{ws2_row}").alignment = Alignment(horizontal="center", vertical="center")
+
+            # FIX (a pedido del cliente, ver bitácora sesión 11): además de la
+            # columna "PROMO" (SÍ/NO), ahora el nombre del producto en el
+            # consolidado también muestra "(PROMO)" al final cuando aplica —
+            # ej. "TV 43 DAMASCO SMART TV (PROMO)". El SUMIF de la columna
+            # Cantidad ya NO usa la celda C{r_idx} como criterio (si lo
+            # hiciera, "(PROMO)" quedaría pegado al texto que se busca en
+            # "Datos Detallados", que no lo tiene, y la suma daría 0) — en
+            # cambio usa el nombre limpio como texto literal, escapando
+            # comillas por si el nombre del producto las tuviera (ej. 18").
+            criteria_escaped = str(p_name).replace('"', '""')
+            if row['ES_PROMO']:
+                desc_formula = f"='Datos Detallados'!F{ws2_row}&\" (PROMO)\""
+            else:
+                desc_formula = f"='Datos Detallados'!F{ws2_row}"
+
+            ws1.cell(row=r_idx, column=3, value=desc_formula).alignment = Alignment(horizontal="center", vertical="center")
             ws1.cell(row=r_idx, column=4, value=f"='Datos Detallados'!I{ws2_row}").number_format = '$#,##0'
             ws1.cell(row=r_idx, column=4).alignment = Alignment(horizontal="center", vertical="center")
-            ws1.cell(row=r_idx, column=5, value=f"=SUMIF('Datos Detallados'!F$2:F${raw_last_row}, C{r_idx}, 'Datos Detallados'!J$2:J${raw_last_row})").alignment = Alignment(horizontal="center", vertical="center")
+            ws1.cell(row=r_idx, column=5, value=f'=SUMIF(\'Datos Detallados\'!F$2:F${raw_last_row}, "{criteria_escaped}", \'Datos Detallados\'!J$2:J${raw_last_row})').alignment = Alignment(horizontal="center", vertical="center")
             ws1.cell(row=r_idx, column=6, value=f"=ROUND(D{r_idx} * E{r_idx}, 0)").number_format = '$#,##0'
             ws1.cell(row=r_idx, column=6).alignment = Alignment(horizontal="center", vertical="center")
             ws1.cell(row=r_idx, column=7, value="SÍ" if row['ES_PROMO'] else "NO").alignment = Alignment(horizontal="center", vertical="center")
@@ -2457,11 +2511,12 @@ def generate_report():
         chart_bar.set_categories(cats_bar)
         
         from openpyxl.chart.series import DataPoint
-        # NOTA (ajustado a pedido del cliente, para calzar exacto con el reporte
-        # de referencia que ya usan): las 3 barras van todas del mismo azul
-        # (accent1 del tema de Excel) — así es como sale en el reporte que
-        # hacen a mano, sin distinguir colores por barra. No se le agrega
-        # coloreado individual a propósito.
+        # ACTUALIZADO (sesión 12, a pedido del cliente): las 3 barras siguen
+        # siendo todas del mismo color (así calzaba con el reporte de
+        # referencia, sesión 9), pero ahora ese color es explícito —
+        # YInMn Blue de la nueva paleta — en vez de depender del tema por
+        # defecto de Excel.
+        chart_bar.series[0].graphicalProperties.solidFill = COLOR_ACCENT_PRINCIPAL
             
         # Remove gridlines
         chart_bar.y_axis.majorGridlines = None
@@ -2486,10 +2541,9 @@ def generate_report():
         chart_pie_promo.add_data(data_pie, from_rows=True)
         chart_pie_promo.set_categories(cats_pie)
         
-        # Assign individual slice colors: #4472C4 (Promo) y #ED7D31 (Fuera de Promo)
-        # (ajustado a pedido del cliente — el reporte de referencia usa el azul
-        # para Promo y el naranja para Fuera de Promo, no al revés)
-        slice_colors = ["4472C4", "ED7D31"]
+        # Assign individual slice colors: paleta de azules (sesión 12, a pedido
+        # del cliente) — Oxford Blue para Promo, Jordy Blue para Fuera de Promo
+        slice_colors = [COLOR_PROMO, COLOR_FUERA_PROMO]
         series_pie = chart_pie_promo.series[0]
         for idx, color in enumerate(slice_colors):
             dp = DataPoint(idx=idx)
