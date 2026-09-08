@@ -290,8 +290,14 @@ def estandarizar_texto(texto):
     t = re.sub(r'\baa\b', 'a/a', t)
     t = re.sub(r'\bac\b', 'a/a', t)
     
-    # Platos y vajillas son sinónimos
-    t = t.replace("platos", "vajilla").replace("plato", "vajilla").replace("vajillas", "vajilla")
+    # Platos y vajillas son sinónimos — pero NO "lavaplatos" (a pedido del
+    # cliente, sesión 15: "lavaplatos" y "lavavajillas" van a categorías
+    # distintas, así que no se pueden unificar en el mismo texto). Se usa
+    # límite de palabra para no tocar "platos" cuando es parte de otra
+    # palabra compuesta como "lavaplatos".
+    t = re.sub(r'\bplatos\b', 'vajilla', t)
+    t = re.sub(r'\bplato\b', 'vajilla', t)
+    t = re.sub(r'\bvajillas\b', 'vajilla', t)
     
     # Map screen sizes robustly to pulg (supporting both single and double quotes)
     t = t.replace('"', ' pulg ').replace("'", ' pulg ')
@@ -418,7 +424,7 @@ def obtener_grupos_palabras_clave(texto_limpio):
         ['plancha de cabello', 'plancha cabello', 'plancha para cabello', 'alaciadora', 'planchita de cabello'],
         ['exprimidor', 'extractor'],
         ['batidora'],
-        ['picatodo', 'picadora', 'procesador'],
+        ['picatodo', 'picadora', 'procesador', 'procesadora'],
         ['nevera', 'refrigerador', 'minibar', 'exhibidora'],
         ['congelador', 'freezer'],
         ['tv', 'televisor', 'pantalla'],
@@ -446,10 +452,23 @@ def obtener_grupos_palabras_clave(texto_limpio):
         # "ELECTRODOMESTICOS" terminaba calzando con cualquier cosa (una
         # cacerola, un aire acondicionado).
         ['hidrojet', 'hydrojet', 'hidro jet'],
+        # FIX (matching, sesión 15): mismo criterio — "cuchillo(s)" y
+        # "rizador" no tenían grupo propio, así que dentro de su categoría
+        # amplia (COCINA / ELECTRODOMESTICOS) terminaban calzando con
+        # cualquier otra cosa de esa categoría (una cocina a gas, una
+        # licuadora).
+        ['cuchillo', 'cuchillos'],
+        ['rizador', 'rizadora'],
     ]
     matched_group_indices = []
+    # FIX (matching, sesión 15): antes esto comparaba por substring suelto —
+    # "rizador" calzaba adentro de "vapoRIZADOR" (Vaporizador De Prendas),
+    # el mismo tipo de bug que "collarin" escondiendo "olla" (ver
+    # categorizar_producto). Se cambió a límite de palabra real, para que
+    # esto no seguir apareciendo cada vez que una palabra corta coincide por
+    # casualidad adentro de otra.
     for idx, g in enumerate(groups):
-        if any(w in texto_limpio for w in g):
+        if any(re.search(r'\b' + re.escape(w) + r'\b', texto_limpio) for w in g):
             matched_group_indices.append(idx)
     return matched_group_indices
 
@@ -698,10 +717,21 @@ def categorizar_producto(nombre_producto):
     nombre = remover_tildes(str(nombre_producto).lower().strip())
     
     # 1. A/A
-    if any(k in nombre for k in ['aire', 'a/a', 'split', 'pisotecho', 'piso techo']) and 'freidora' not in nombre and 'fryer' not in nombre:
+    # FIX (matching, sesión 15, encontrado al revisar el efecto del arreglo
+    # de límite de palabra): "aire" solo es muy amplio — cualquier producto
+    # que lo mencione entraba acá, incluyendo purificadores de aire, cortinas
+    # de aire, y planchas alisadoras "de aire" que no son aires
+    # acondicionados. Se agregan esas exclusiones, mismo criterio que ya
+    # existía para "freidora"/"fryer".
+    if (any(k in nombre for k in ['aire', 'a/a', 'split', 'pisotecho', 'piso techo'])
+            and not any(x in nombre for x in ['freidora', 'fryer', 'purificador', 'cortina', 'alisadora', 'protector de voltaje', 'protector de sobrevoltaje'])):
         return 'A/A'
     # 2. TV
-    elif any(k in nombre for k in ['tv', 'televisor', 'pantalla']) and 'base' not in nombre and 'soporte' not in nombre:
+    # FIX (a pedido del cliente, sesión 15): se sacó "pantalla" de este check.
+    # Era muy genérico — cualquier electrodoméstico con display digital
+    # ("Licuadora con pantalla", "Nevera con pantalla") caía como TV por
+    # error. Ahora hace falta que diga "tv" o "televisor" explícitamente.
+    elif any(k in nombre for k in ['tv', 'televisor']) and 'base' not in nombre and 'soporte' not in nombre:
         return 'TV'
     # 3. LAVADO
     elif any(k in nombre for k in ['lavadora', 'secadora', 'doble tina', 'semiautomatica']):
@@ -713,10 +743,25 @@ def categorizar_producto(nombre_producto):
     elif any(k in nombre for k in ['refrigerador', 'refigerador', 'nevera']):
         return 'NEVERA'
     # 6. COCINA
-    elif any(k in nombre for k in ['tope a gas', 'tope electrico', 'tope dual', 'cocina a gas', 'campana', 'estufa', 'cocina', 'sarten', 'cubierto', 'vajilla', 'plato', 'vaso', 'utensilio']) or ('olla' in nombre and 'arrocera' not in nombre):
+    # FIX (a pedido del cliente, sesión 15): "collarin de seguridad" caía acá
+    # por error — contiene "olla" escondido adentro de la palabra
+    # ("c-OLLA-rin"), y el chequeo original de "olla" no respetaba límites de
+    # palabra. Se cambió a contains_word (compara la palabra completa, no
+    # substring) para "olla" y "vaso", que son las más cortas y propensas a
+    # este tipo de falso positivo. También: "lavaplatos" ahora es una
+    # excepción explícita a OTROS (antes caía en COCINA por el substring
+    # "plato" escondido adentro) — a diferencia de "lavavajillas", que el
+    # cliente sí quiere en COCINA. Se agregó "cuchillo" como disparador
+    # nuevo. Se sacó "vaso" de los disparadores (ahora va a OTROS).
+    elif 'lavaplatos' in nombre:
+        return 'OTROS'
+    elif (any(k in nombre for k in ['tope a gas', 'tope electrico', 'tope dual', 'cocina a gas', 'campana', 'estufa', 'cocina', 'sarten', 'cubierto', 'vajilla', 'utensilio', 'cuchillo', 'cuchillos'])
+          or (contains_word(nombre, 'olla') and 'arrocera' not in nombre)):
         return 'COCINA'
     # 7. COMPUTACION
-    elif any(k in nombre for k in ['laptop', 'computadora', 'monitor', 'auriculares', 'audifonos', 'audifono', 'teclado', 'mouse', 'raton', 'router', 'modem', 'tablet', 'tableta']) or contains_word(nombre, 'pc') or contains_word(nombre, 'ups'):
+    # FIX (a pedido del cliente, sesión 15): se agregó "internet" (ej. "kit
+    # mini de internet") como disparador.
+    elif any(k in nombre for k in ['laptop', 'computadora', 'monitor', 'auriculares', 'audifonos', 'audifono', 'teclado', 'mouse', 'raton', 'router', 'modem', 'tablet', 'tableta', 'internet']) or contains_word(nombre, 'pc') or contains_word(nombre, 'ups'):
         if any(x in nombre for x in ['morral', 'bolso', 'mochila', 'funda']):
             return 'OTROS'
         return 'COMPUTACION'
@@ -727,15 +772,20 @@ def categorizar_producto(nombre_producto):
     elif any(k in nombre for k in ['celular', 'telefono', 'smartphone', 'movil']):
         return 'TELEFONIA'
     # 10. ELECTRODOMESTICOS
-    elif any(k in nombre for k in [
+    # FIX (a pedido del cliente, sesión 15): se sacó "secador" (secador de
+    # cabello ahora va a OTROS — no afecta a "secadora" de ropa, que ya se
+    # resuelve antes, en el check #3 LAVADO) y "ventilador" (ahora OTROS).
+    # "plancha" ahora excluye explícitamente "alisadora"/"cabello" — la
+    # plancha de ropa se queda acá, la de cabello va a OTROS.
+    elif (any(k in nombre for k in [
         'licuadora', 'freidora', 'airfryer', 'air fryer', 'tostador', 'tostadora', 'cafetera', 'sanduchera',
         'sandwichera', 'waflera', 'batidora', 'procesador', 'arrocera', 'nutribullet', 'hervidor', 'tetera',
         'extractor', 'exprimidor', 'multiolla', 'instant pot', 'parrilla', 'parrillera', 'panini', 'afilador', 'balanza',
-        'plancha', 'aspiradora', 'secador', 'rizador', 'rasuradora', 'recortadora', 'cepillo de dientes',
-        'ventilador', 'humificador', 'humidificador', 'picatodo', 'crepera', 'deshidratador', 'cotufera',
+        'aspiradora', 'rizador', 'rasuradora', 'recortadora', 'cepillo de dientes',
+        'humificador', 'humidificador', 'picatodo', 'crepera', 'deshidratador', 'cotufera',
         'espumador', 'yogurtera', 'hidrojet', 'hydrojet', 'microonda', 'olla de presion', 'olla presion',
         'dispensador', 'horno tostador', 'horno electrico', 'horno freidora', 'horno freidor', 'tosta horno'
-    ]):
+    ]) or ('plancha' in nombre and 'alisadora' not in nombre and 'cabello' not in nombre)):
         return 'ELECTRODOMESTICOS'
     else:
         return 'OTROS'
