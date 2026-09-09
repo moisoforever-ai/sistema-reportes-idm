@@ -897,6 +897,120 @@ def limpiar_descripcion_producto(texto):
     return resultado
 
 
+# --- REESTRUCTURACIÓN DE NOMBRES PARA BÚSQUEDA EN KOBO (sesión 16) ---
+# FIX (a pedido del cliente): al escribir "A/A" en el buscador del selector
+# de productos de Kobo, solo aparecían los productos que literalmente
+# empiezan con "A/A" — que en la base real son una minoría (7 de 96 en Daka,
+# por ejemplo). La mayoría dice "Aire Acondicionado...", "AC SPLIT...", etc.
+# Se reutiliza acá la misma lógica de reestructuración de nombres (ya
+# construida y probada en la sesión 14) para que TODOS los productos de una
+# categoría expongan el mismo prefijo reconocible en el texto de búsqueda —
+# sin importar cómo esté escrito el nombre original. El nombre real (columna
+# "name" del catálogo, lo que efectivamente se guarda) no cambia — esto solo
+# afecta la columna "label" que Kobo usa para buscar y mostrar.
+ETIQUETA_CATEGORIA_ANGOSTA = {
+    'A/A': 'A/A', 'NEVERA': 'NEVERA', 'TV': 'TV',
+    'CONGELADOR': 'CONGELADOR', 'TELEFONIA': 'CELULAR',
+}
+ETIQUETA_POR_GRUPO_INDICE = {
+    0: 'MICROONDAS', 1: 'LICUADORA', 2: 'FREIDORA', 3: 'CAFETERA', 4: 'HORNO',
+    5: 'TOSTADOR', 6: 'OLLA', 7: 'VENTILADOR', 8: 'PLANCHA', 9: 'PLANCHA', 10: 'PLANCHA',
+    11: 'EXPRIMIDOR', 12: 'BATIDORA', 13: 'PROCESADOR',
+    14: 'NEVERA', 15: 'CONGELADOR', 16: 'TV', 17: 'A/A',
+    18: 'DISPENSADOR', 19: 'CORNETA', 20: 'BASE',
+    21: 'SECADOR', 22: 'SECADORA', 23: 'HIDROJET', 24: 'CUCHILLO', 25: 'RIZADOR',
+    26: 'CAMPANA', 27: 'TOPE', 28: 'VASO', 29: 'COCINA', 30: 'MONITOR',
+    31: 'LAPTOP', 32: 'AUDIFONOS', 33: 'SARTEN', 34: 'TABLET',
+    35: 'PARRILLERA', 36: 'TETERA', 37: 'ROUTER', 38: 'TECLADO',
+    39: 'UPS', 40: 'ESCURRIDOR', 41: 'LAVAVAJILLAS', 42: 'MOUSE',
+    43: 'VAJILLA', 44: 'VAPORIZADOR',
+}
+GRUPOS_EXTRA_ETIQUETA = [
+    ['campana'], ['tope a gas', 'tope electrico', 'tope dual', 'tope'], ['vaso', 'vasos'],
+    ['cocina'], ['monitor'], ['laptop', 'notebook'], ['audifonos', 'audífonos', 'auriculares'],
+    ['sarten', 'sartén'], ['tablet', 'tableta'], ['parrillera', 'parrilla'], ['tetera', 'hervidor'],
+    ['router'], ['teclado'], ['ups'], ['escurridor'], ['lavavajillas', 'lavaplatos'],
+    ['mouse', 'raton'], ['vajilla', 'plato', 'platos'], ['vaporizador'],
+]
+DESCARTAR_ETIQUETA = set("""
+de con para color colores el la los las y en un una
+negro negra blanco blanca gris plata plateado plateada dorado dorada
+azul rojo verde amarillo beige rosado morado naranja
+acero inoxidable satinado mate brillante c/disp
+""".split())
+UNIDADES_SUELTAS_ETIQUETA = set("""
+btu pies pie pulg pulgadas litros litro lts kg kgs watts watt hz gb mb tb tazas taza
+""".split())
+CONSERVAR_PALABRA_ETIQUETA = set("""
+inverter split smart 4k qled oled led uhd automatica semiautomatica
+digital dual frost duo doble dispensador
+""".split()) | UNIDADES_SUELTAS_ETIQUETA
+PALABRAS_ACCESORIO_ETIQUETA = set("""
+soporte base funda protector cargador cable tira correa forro
+""".split())
+_UNIDAD_ETQ = r'(BTU|KGS?|LTS?|LT|L|ML|V|VA|WATT|W|HZ|GB|MB|TB|MM|CM|M|"|\'|HRS?|H|PZAS?|PZ|PCS|PIES?|K|P)'
+_NUM_ETQ = r'\d+(?:[.,]\d+)?'
+PATRON_SPEC_ETIQUETA = re.compile(
+    rf'^({_NUM_ETQ}{_UNIDAD_ETQ}?|{_NUM_ETQ}-{_NUM_ETQ}{_UNIDAD_ETQ}?|{_NUM_ETQ}[xX]{_NUM_ETQ}{_UNIDAD_ETQ}?|{_NUM_ETQ}{_UNIDAD_ETQ}?\+{_NUM_ETQ}{_UNIDAD_ETQ}?)$',
+    re.IGNORECASE
+)
+
+def obtener_etiqueta_busqueda(producto_original, marca, categoria, grupos_kw, texto_norm):
+    """
+    Devuelve un nombre reestructurado (ETIQUETA + MARCA + specs clave) para
+    usar como texto de BÚSQUEDA en el selector de Kobo — no para guardar.
+    Si no se puede determinar una etiqueta clara, devuelve el texto limpio
+    original sin reestructurar.
+    """
+    texto_lower = producto_original.lower()
+    es_accesorio = any(w in texto_lower.split() for w in PALABRAS_ACCESORIO_ETIQUETA)
+    grupos_totales = list(grupos_kw)
+    for offset, palabras in enumerate(GRUPOS_EXTRA_ETIQUETA):
+        if any(re.search(r'\b' + re.escape(p) + r'\b', texto_norm) for p in palabras):
+            grupos_totales.append(26 + offset)
+
+    if categoria == 'TELEFONIA':
+        if es_accesorio:
+            etiqueta = 'ACCESORIO CELULAR'
+        elif 'fijo' in texto_lower or 'inalambrico' in texto_lower:
+            etiqueta = 'TELEFONO'
+        else:
+            etiqueta = 'CELULAR'
+    elif categoria in ETIQUETA_CATEGORIA_ANGOSTA:
+        etiqueta = ETIQUETA_CATEGORIA_ANGOSTA[categoria]
+        if es_accesorio:
+            etiqueta = f'ACCESORIO {etiqueta}'
+    else:
+        etiqueta = None
+        for idx in grupos_totales:
+            if idx in ETIQUETA_POR_GRUPO_INDICE:
+                etiqueta = ETIQUETA_POR_GRUPO_INDICE[idx]
+                break
+        if etiqueta is None:
+            return producto_original
+        if es_accesorio:
+            etiqueta = f'ACCESORIO {etiqueta}'
+
+    marca_str = str(marca).strip() if marca and str(marca).lower() != 'nan' else ''
+    etiqueta_palabras = set(etiqueta.lower().split())
+    specs = []
+    for palabra in producto_original.split():
+        p_limpio = palabra.strip('.,;:()')
+        p_lower = p_limpio.lower()
+        if not p_lower or p_lower in DESCARTAR_ETIQUETA or p_lower in etiqueta_palabras:
+            continue
+        if marca_str and marca_str.lower() in p_lower:
+            continue
+        if PATRON_SPEC_ETIQUETA.match(p_limpio) or p_lower in CONSERVAR_PALABRA_ETIQUETA:
+            specs.append(p_limpio.upper())
+
+    partes = [etiqueta]
+    if marca_str:
+        partes.append(marca_str.upper())
+    partes.extend(specs)
+    return ' '.join(partes)
+
+
 def buscar_coincidencia_tecnica(fila, universo_maestro):
     producto_campo = fila['Producto']
     marca_campo = remover_tildes(str(fila['Marca'])).lower().strip() if not pd.isna(fila['Marca']) else ""
@@ -1715,7 +1829,26 @@ def exportar_catalogo_kobo():
                 precio_str = f"${precio:,.0f}"
             except ValueError:
                 precio_str = ''
-            label = f"{producto} — {precio_str}" if precio_str else producto
+
+            # FIX (a pedido del cliente, sesión 16): la columna "label" (lo
+            # que Kobo usa para buscar) ahora arranca con el nombre
+            # reestructurado (ej. "A/A LG SPLIT...") en vez del texto
+            # original tal cual — así buscar "A/A" encuentra TODOS los
+            # aires acondicionados, no solo los que casualmente empiezan
+            # con esas letras en el catálogo real. La columna "name" (lo
+            # que efectivamente se guarda en el reporte) NO cambia — sigue
+            # siendo el texto original exacto.
+            norm = estandarizar_texto(producto)
+            categoria = categorizar_producto(norm)
+            grupos = obtener_grupos_palabras_clave(norm)
+            etiqueta_busqueda = obtener_etiqueta_busqueda(producto, row['MARCA'], categoria, grupos, norm)
+
+            if etiqueta_busqueda != producto:
+                label = f"{etiqueta_busqueda} — {producto}"
+            else:
+                label = producto
+            if precio_str:
+                label = f"{label} — {precio_str}"
             filas.append({'name': producto, 'label': label, 'empresa': empresa_code})
 
     if not filas:
