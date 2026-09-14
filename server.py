@@ -207,26 +207,38 @@ GID_BASE_MULTIMAX = "2089283830"
 # oscura para las categorías 7 en adelante. Se replican acá los valores hex
 # exactos (calculados a partir del tema real de un archivo de referencia).
 #
-# ACTUALIZADO (sesión 12, a pedido del cliente): se reemplazó por la paleta de
-# 5 azules que mandó (Oxford Blue → Lavender), aplicada tanto acá como en el
-# sistema web. Esto se aparta a propósito del color exacto del reporte manual
-# de referencia (sesión 9) — fue una decisión consciente confirmada con el
-# cliente, no un olvido de esa calibración anterior. Se cicla cada 5
-# categorías para los casos con más de 5 categorías con ventas ese día.
+# ACTUALIZADO (sesión 12, a pedido del cliente): se había reemplazado por la
+# paleta de 5 azules (Oxford Blue → Lavender), aplicada tanto acá como en el
+# sistema web.
+#
+# REVERTIDO (sesión 18, a pedido del cliente): un solo tono de azul hacía
+# difícil distinguir las categorías entre sí en el gráfico de torta — se
+# vuelve a la paleta "Office" multicolor (Azul/Naranja/Gris/Oro/Azul
+# claro/Verde), que además es la misma que ya estaba calibrada contra el
+# reporte manual de referencia en la sesión 9. La paleta de azules se queda
+# SOLO en el sistema web (login, formulario, paneles), donde tiene sentido
+# como color de marca — acá en los gráficos del Excel, lo que importa es
+# poder distinguir cada porción de un vistazo, no la consistencia de marca.
 PALETA_CATEGORIAS_POSICION = [
-    "192338",  # Oxford Blue
-    "1E2E4F",  # Space Cadet
-    "31487A",  # YInMn Blue
-    "8FB3E2",  # Jordy Blue
-    "D9E1F1",  # Lavender (web)
+    "4472C4",  # accent1 - azul
+    "ED7D31",  # accent2 - naranja
+    "A5A5A5",  # accent3 - gris
+    "FFC000",  # accent4 - dorado
+    "5B9BD5",  # accent5 - celeste
+    "70AD47",  # accent6 - verde
+    "264478",  # accent1 oscuro (lumMod 60%) - categorías 7+
+    "9E480E",  # accent2 oscuro
+    "636363",  # accent3 oscuro
+    "997300",  # accent4 oscuro
+    "255E91",  # accent5 oscuro
 ]
 
-# Colores individuales de la nueva paleta, para los otros 2 gráficos (barras
-# y pie Promo/Fuera de Promo) — mismo criterio: familia de azules, no colores
-# sueltos sin relación.
-COLOR_ACCENT_PRINCIPAL = "31487A"   # YInMn Blue — color único de las barras (Promo/Fuera de Promo/Marcas)
-COLOR_PROMO = "192338"              # Oxford Blue — porción "Promo" del pie
-COLOR_FUERA_PROMO = "8FB3E2"        # Jordy Blue — porción "Fuera de Promo" del pie
+# Mismo criterio para los otros 2 gráficos — vuelven a los colores del
+# reporte de referencia (sesión 9): las 3 barras del mismo azul (accent1),
+# y Promo=azul / Fuera de Promo=naranja en el pie.
+COLOR_ACCENT_PRINCIPAL = "4472C4"   # accent1 - color único de las barras (Promo/Fuera de Promo/Marcas)
+COLOR_PROMO = "4472C4"              # accent1 azul - porción "Promo" del pie
+COLOR_FUERA_PROMO = "ED7D31"        # accent2 naranja - porción "Fuera de Promo" del pie
 
 # --- DATA URLS ---
 URL_TIPIFICACIONES = f"https://docs.google.com/spreadsheets/d/e/2PACX-1vTfq81DhLQ_8jkbFIAs7OWaO7qkYRis350TTRz_BbbsVucVw4K87Ai0YgiynRIQG1CqRJv9i1V6oEDo/pub?gid={GID_TIPIFICACIONES}&single=true&output=csv"
