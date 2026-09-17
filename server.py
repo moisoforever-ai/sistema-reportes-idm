@@ -1882,6 +1882,76 @@ def exportar_catalogo_kobo():
         respuesta.headers['X-Empresas-Con-Error'] = ','.join(errores)
     return respuesta
 
+@app.route('/admin/exportar_marcas_kobo', methods=['GET'])
+def exportar_marcas_kobo():
+    """
+    Genera marcas_catalogo.csv que usa el selector de MARCA del formulario
+    de Kobo (select_one_from_file) — mismo criterio que
+    exportar_catalogo_kobo, pero para marcas en vez de productos.
+
+    Se deduplican variantes de mayúsculas/minúsculas de la misma marca
+    (ej. "Daewoo"/"DAEWOO" en la base real de Daka son la misma marca
+    escrita distinto) — se conserva la variante más usada en los datos
+    reales, para no forzar una marca que normalmente va en mayúsculas
+    (ej. "LG", "JBL") a un Title Case que se vería raro. También se
+    descartan valores basura de carga (ej. la palabra suelta "Marca").
+
+    Uso: igual que el catálogo de productos — descargar y subir en la
+    pestaña "Media" del proyecto de Kobo (nombre exacto:
+    marcas_catalogo.csv), después Redeploy.
+    """
+    if not is_logged_in():
+        return redirect(url_for('login_page'))
+    if not is_admin():
+        return redirect(url_for('home'))
+
+    VALORES_BASURA = {'marca', 'n/a', 'na', 's/m', 'sin marca'}
+
+    filas = []
+    empresas_gid = [('ddaka', GID_BASE_DAKA), ('ddamasco', GID_BASE_DAMASCO), ('mmultimax', GID_BASE_MULTIMAX)]
+    errores = []
+    for empresa_code, gid_base in empresas_gid:
+        try:
+            _, df_maestro = fetch_data(gid_base, force_sync=True)
+        except Exception as e:
+            app.logger.warning(f"Error al exportar marcas Kobo para {empresa_code}: {e}")
+            errores.append(empresa_code)
+            continue
+
+        marcas_crudas = df_maestro['MARCA'].dropna().astype(str).str.strip()
+        marcas_crudas = marcas_crudas[marcas_crudas.str.lower().apply(lambda x: x not in VALORES_BASURA and x != 'nan' and x != '')]
+
+        # Agrupar por minúscula (para no duplicar "Daewoo"/"DAEWOO"), y
+        # quedarse con la variante de mayúsculas más usada en los datos reales.
+        conteo = marcas_crudas.value_counts()
+        por_minuscula = {}
+        for valor, cnt in conteo.items():
+            clave = valor.lower()
+            if clave not in por_minuscula or cnt > por_minuscula[clave][1]:
+                por_minuscula[clave] = (valor, cnt)
+
+        for valor_canonico, _ in sorted(por_minuscula.values(), key=lambda x: x[0].lower()):
+            filas.append({'name': valor_canonico, 'label': valor_canonico, 'empresa': empresa_code})
+
+    if not filas:
+        return "No se pudo obtener la lista maestra de ninguna empresa (revisá la conexión a Google Sheets). Nada para exportar.", 502
+
+    df_final = pd.DataFrame(filas)
+    output = io.StringIO()
+    df_final.to_csv(output, index=False)
+    csv_bytes = io.BytesIO(output.getvalue().encode('utf-8'))
+    csv_bytes.seek(0)
+
+    respuesta = send_file(
+        csv_bytes,
+        mimetype="text/csv",
+        as_attachment=True,
+        download_name="marcas_catalogo.csv"
+    )
+    if errores:
+        respuesta.headers['X-Empresas-Con-Error'] = ','.join(errores)
+    return respuesta
+
 # --- API ENDPOINTS ---
 @app.route('/')
 def home():
@@ -2517,14 +2587,24 @@ def generate_report():
             p_name = row['Producto']
             ws2_row = prod_to_row_idx.get(p_name, 2)
 
-            # El nombre del producto muestra "(PROMO)" al final cuando aplica
-            # — ej. "TV 43 DAMASCO SMART TV (PROMO)". El SUMIF de la columna
-            # Cantidad ya NO usa la celda C{r_idx} como criterio (si lo
-            # hiciera, "(PROMO)" quedaría pegado al texto que se busca en
-            # "Datos Detallados", que no lo tiene, y la suma daría 0) — en
-            # cambio usa el nombre limpio como texto literal, escapando
-            # comillas por si el nombre del producto las tuviera (ej. 18").
-            criteria_escaped = str(p_name).replace('"', '""')
+            # FIX (sesión 19, corrección de raíz a pedido del cliente): antes
+            # el SUMIF de Cantidad usaba el nombre del producto como texto
+            # LITERAL, congelado al momento de generar el reporte — así que
+            # si el cliente corregía un producto mal renderizado en "Datos
+            # Detallados" después, la Descripción sí se actualizaba sola
+            # (es una fórmula en vivo), pero Cantidad y Venta Total se
+            # quedaban en $0, porque el texto que buscaban ya no existía en
+            # "Datos Detallados" (fue reemplazado por la corrección).
+            #
+            # Ahora la columna G (oculta) guarda el nombre LIMPIO como
+            # fórmula en vivo (sin el tag "(PROMO)", que rompería la
+            # búsqueda), y el SUMIF de Cantidad usa esa celda como criterio
+            # — no un texto congelado. Así, si el cliente corrige un
+            # producto en "Datos Detallados", tanto la Descripción como la
+            # Cantidad y la Venta Total del Consolidado se recalculan solas,
+            # sin tener que tocar nada más a mano.
+            ws1.cell(row=r_idx, column=7, value=f"='Datos Detallados'!F{ws2_row}")
+
             if row['ES_PROMO']:
                 desc_formula = f"='Datos Detallados'!F{ws2_row}&\" (PROMO)\""
             else:
@@ -2533,7 +2613,7 @@ def generate_report():
             ws1.cell(row=r_idx, column=3, value=desc_formula).alignment = Alignment(horizontal="center", vertical="center")
             ws1.cell(row=r_idx, column=4, value=f"='Datos Detallados'!I{ws2_row}").number_format = '$#,##0'
             ws1.cell(row=r_idx, column=4).alignment = Alignment(horizontal="center", vertical="center")
-            ws1.cell(row=r_idx, column=5, value=f'=SUMIF(\'Datos Detallados\'!F$2:F${raw_last_row}, "{criteria_escaped}", \'Datos Detallados\'!J$2:J${raw_last_row})').alignment = Alignment(horizontal="center", vertical="center")
+            ws1.cell(row=r_idx, column=5, value=f"=SUMIF('Datos Detallados'!F$2:F${raw_last_row}, G{r_idx}, 'Datos Detallados'!J$2:J${raw_last_row})").alignment = Alignment(horizontal="center", vertical="center")
             ws1.cell(row=r_idx, column=6, value=f"=ROUND(D{r_idx} * E{r_idx}, 0)").number_format = '$#,##0'
             ws1.cell(row=r_idx, column=6).alignment = Alignment(horizontal="center", vertical="center")
             for col_idx in range(3, 7):
@@ -2544,6 +2624,7 @@ def generate_report():
                     c.fill = fill_zebra
                     
         t2_last_prod_row = t2_data_start + len(df_t2) - 1
+        ws1.column_dimensions['G'].hidden = True
         
         # TOTAL CONTEO (TABLA 2)
         current_t2_row = t2_last_prod_row + 1
@@ -2642,6 +2723,71 @@ def generate_report():
                 ws1.cell(row=current_t2_row, column=col_idx).fill = fill_totals
             for col_idx in range(3, 7):
                 ws1.cell(row=current_t2_row, column=col_idx).border = double_bottom_border
+
+        # --- TABLA DINÁMICA (a pedido del cliente, sesión 19) ---
+        # Objetivo real del cliente: cuando el sistema renderiza mal un
+        # producto en el Consolidado, en vez de tener que actualizar esta
+        # tabla a mano cada vez que lo corrige ahí, esta tabla se entera
+        # SOLA — porque no copia valores, hace SUMIF contra las propias
+        # celdas del Consolidado. Si el cliente corrige una descripción en
+        # el Consolidado y eso hace que dos filas ahora digan lo mismo, esta
+        # tabla las combina automáticamente en vez de mostrarlas duplicadas
+        # con el mismo nombre.
+        #
+        # LIMITACIÓN A TENER EN CUENTA: esto no es una tabla dinámica nativa
+        # de Excel (openpyxl no puede crear esas de forma confiable — ver
+        # conversación). El ORDEN (de menor a mayor) se calcula UNA vez al
+        # generar el archivo, según los valores de ese momento — si después
+        # se corrige un producto en el Consolidado y eso cambia los montos,
+        # los NÚMEROS de esta tabla se actualizan solos, pero el ORDEN de
+        # las filas en la página no se reacomoda solo (a diferencia de una
+        # tabla dinámica real, que sí se reordena al actualizar).
+        current_t2_row += 2
+        td_title_row = current_t2_row
+        ws1.cell(row=td_title_row, column=3, value=f"TABLA DINÁMICA {empresa_input.upper()} {sucursal.upper().replace('_', ' ')}")
+        ws1.merge_cells(start_row=td_title_row, start_column=3, end_row=td_title_row, end_column=6)
+        for col_idx in range(3, 7):
+            c = ws1.cell(row=td_title_row, column=col_idx)
+            c.font = font_header
+            c.fill = fill_header
+            c.border = thin_border
+            c.alignment = Alignment(horizontal="center", vertical="center")
+        ws1.row_dimensions[td_title_row].height = 26
+
+        headers_td = ['DESCRIPCION', 'SUMA CANTIDAD', 'SUMA VENTA TOTAL', 'PRECIO']
+        for col_idx, h in enumerate(headers_td, start=3):
+            cell = ws1.cell(row=td_title_row + 1, column=col_idx, value=h)
+            cell.font = font_subtitles
+            cell.fill = fill_subtitles
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+            cell.border = thin_border
+        ws1.row_dimensions[td_title_row + 1].height = 24
+
+        # Orden de menor a mayor por Venta Total, calculado con los valores
+        # reales al momento de generar el reporte (ver limitación arriba).
+        orden_td = df_t2.reset_index(drop=True).copy()
+        orden_td['fila_consolidado'] = orden_td.index + t2_data_start
+        orden_td = orden_td.sort_values('Venta Total', ascending=True).reset_index(drop=True)
+
+        td_data_start = td_title_row + 2
+        for idx, row_td in orden_td.iterrows():
+            r_idx = td_data_start + idx
+            fila_origen = int(row_td['fila_consolidado'])
+
+            ws1.cell(row=r_idx, column=3, value=f"=C{fila_origen}").alignment = Alignment(horizontal="center", vertical="center")
+            ws1.cell(row=r_idx, column=4, value=f"=SUMIF(C${t2_data_start}:C${t2_last_prod_row}, C{r_idx}, E${t2_data_start}:E${t2_last_prod_row})").alignment = Alignment(horizontal="center", vertical="center")
+            ws1.cell(row=r_idx, column=5, value=f"=SUMIF(C${t2_data_start}:C${t2_last_prod_row}, C{r_idx}, F${t2_data_start}:F${t2_last_prod_row})").number_format = '$#,##0'
+            ws1.cell(row=r_idx, column=5).alignment = Alignment(horizontal="center", vertical="center")
+            ws1.cell(row=r_idx, column=6, value=f"=IF(D{r_idx}=0, 0, ROUND(E{r_idx}/D{r_idx}, 2))").number_format = '$#,##0.00'
+            ws1.cell(row=r_idx, column=6).alignment = Alignment(horizontal="center", vertical="center")
+            for col_idx in range(3, 7):
+                c = ws1.cell(row=r_idx, column=col_idx)
+                c.font = font_data
+                c.border = thin_border
+                if r_idx % 2 == 1:
+                    c.fill = fill_zebra
+
+        current_row = td_data_start + len(orden_td)
 
         # --- TABLA 3: Resumen Promo / Fuera de Promo / Marcas ---
         # Ubicada al centro superior: Columnas I-L, filas 2-4
