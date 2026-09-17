@@ -952,10 +952,20 @@ acero inoxidable satinado mate brillante c/disp
 """.split())
 UNIDADES_SUELTAS_ETIQUETA = set("""
 btu pies pie pulg pulgadas litros litro lts kg kgs watts watt hz gb mb tb tazas taza
+toneladas tonelada puerta puertas
 """.split())
+# FIX (a pedido del cliente, sesión 20): "cassette", "ventana", "piso techo",
+# "portatil" (tipo de instalación del A/A) y "vertical"/"horizontal" (tipo de
+# congelador) se estaban descartando como si fueran decorativos — pero son
+# justo la diferencia física entre productos distintos (un A/A cassette no
+# es lo mismo que uno de ventana). Sin esto, dos productos bien distintos
+# podían terminar mostrando el mismo prefijo de búsqueda, y un freelance
+# viendo solo eso en el celular podía pensar que el producto no estaba en
+# la lista cuando sí estaba.
 CONSERVAR_PALABRA_ETIQUETA = set("""
 inverter split smart 4k qled oled led uhd automatica semiautomatica
 digital dual frost duo doble dispensador
+cassette ventana piso techo portatil mini multi vertical horizontal
 """.split()) | UNIDADES_SUELTAS_ETIQUETA
 PALABRAS_ACCESORIO_ETIQUETA = set("""
 soporte base funda protector cargador cable tira correa forro
