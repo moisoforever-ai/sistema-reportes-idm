@@ -2583,16 +2583,34 @@ def generate_report():
         current_row += 2 # Dejamos espacio para el Consolidado
 
         # --- TABLA 2: Consolidado de Ventas por Producto ---
-        # FIX (a pedido del cliente, sesión 22): la Tabla Dinámica ahora es
-        # NATIVA de Excel de verdad (ver hoja "Tabla Dinámica" — 2 tablas
-        # dinámicas reales, con Actualizar automático), no una tabla armada
-        # con fórmulas. Como una tabla dinámica real puede reordenar sus
-        # propias filas al actualizarse, el Consolidado NO puede depender de
-        # referencias fijas a esas celdas — así que vuelve a calcular
-        # Cantidad y Venta Total por su cuenta, en vivo contra "Datos
-        # Detallados" (mismo mecanismo robusto de la sesión 18: columna
-        # auxiliar oculta G con el nombre limpio, para que el SUMIF no se
-        # rompa con el tag "(PROMO)"). Precio = Venta Total / Cantidad.
+        # FIX (a pedido del cliente, sesión 23): Cantidad y Venta Total del
+        # Consolidado ahora se leen DE la Tabla Dinámica nativa (hoja "Tabla
+        # Dinámica"), no se recalculan aparte contra "Datos Detallados". Se
+        # usa INDEX/MATCH por nombre de producto (columna oculta G, ver
+        # abajo) en vez de una referencia fija de celda, porque una tabla
+        # dinámica real puede reordenar sus filas al actualizarse — así el
+        # Consolidado sigue encontrando el producto correcto sin importar en
+        # qué fila haya quedado. Precio = Venta Total / Cantidad.
+        #
+        # TRADE-OFF ACEPTADO POR EL CLIENTE: al quedar enlazado a la tabla
+        # dinámica, el Consolidado hereda su misma limitación — no se
+        # recalcula solo al editar "Datos Detallados", hace falta actualizar
+        # la tabla dinámica (clic derecho → Actualizar) o cerrar y reabrir el
+        # archivo (queda con refresh_on_load activado). Antes (sesión 18-22)
+        # el Consolidado sí era 100% instantáneo vía SUMIF directo; se
+        # cambia a pedido explícito del cliente para que un producto
+        # realmete nuevo (sin fila previa en Datos Detallados) también
+        # pueda reflejarse acá tras actualizar la tabla dinámica.
+        #
+        # LIMITACIÓN QUE SIGUE EXISTIENDO: el Consolidado tiene un número
+        # FIJO de filas (una por producto distinto al momento de generar el
+        # reporte). Si aparece un producto TOTALMENTE nuevo en "Datos
+        # Detallados" (sin ninguna fila previa igual), la Tabla Dinámica sí
+        # va a mostrarlo al actualizar, pero el Consolidado no puede crear
+        # una fila nueva por su cuenta — para eso hace falta generar el
+        # reporte de nuevo desde el sistema web.
+        pivot_row_start = 4  # fila 3 = encabezado de la tabla dinámica, datos desde la 4
+        pivot_row_end = pivot_row_start + len(df_t2) + 200  # margen para productos nuevos tras refrescar
         t2_title_row = current_row
         ws1.cell(row=t2_title_row, column=3, value=f"CONSOLIDADO EDM {empresa_input.upper()} {sucursal.upper().replace('_', ' ')}")
         ws1.merge_cells(start_row=t2_title_row, start_column=3, end_row=t2_title_row, end_column=6)
@@ -2639,8 +2657,8 @@ def generate_report():
                 desc_formula = f"='Datos Detallados'!F{ws2_row}"
 
             ws1.cell(row=r_idx, column=3, value=desc_formula).alignment = Alignment(horizontal="center", vertical="center")
-            ws1.cell(row=r_idx, column=5, value=f"=SUMIF('Datos Detallados'!F$2:F${raw_last_row}, G{r_idx}, 'Datos Detallados'!J$2:J${raw_last_row})").alignment = Alignment(horizontal="center", vertical="center")
-            ws1.cell(row=r_idx, column=6, value=f"=SUMIF('Datos Detallados'!F$2:F${raw_last_row}, G{r_idx}, 'Datos Detallados'!K$2:K${raw_last_row})").number_format = '$#,##0'
+            ws1.cell(row=r_idx, column=5, value=f"=IFERROR(INDEX('Tabla Dinámica'!$B${pivot_row_start}:$B${pivot_row_end}, MATCH(G{r_idx}, 'Tabla Dinámica'!$A${pivot_row_start}:$A${pivot_row_end}, 0)), 0)").alignment = Alignment(horizontal="center", vertical="center")
+            ws1.cell(row=r_idx, column=6, value=f"=IFERROR(INDEX('Tabla Dinámica'!$F${pivot_row_start}:$F${pivot_row_end}, MATCH(G{r_idx}, 'Tabla Dinámica'!$E${pivot_row_start}:$E${pivot_row_end}, 0)), 0)").number_format = '$#,##0'
             ws1.cell(row=r_idx, column=6).alignment = Alignment(horizontal="center", vertical="center")
             ws1.cell(row=r_idx, column=4, value=f"=IF(E{r_idx}=0, 0, ROUND(F{r_idx}/E{r_idx}, 2))").number_format = '$#,##0.00'
             ws1.cell(row=r_idx, column=4).alignment = Alignment(horizontal="center", vertical="center")
