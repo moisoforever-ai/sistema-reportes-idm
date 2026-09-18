@@ -2592,6 +2592,13 @@ def generate_report():
         # Consolidado sigue encontrando el producto correcto sin importar en
         # qué fila haya quedado. Precio = Venta Total / Cantidad.
         #
+        # DESCRIPCION también sale de la Tabla Dinámica con el mismo
+        # INDEX/MATCH (no se deja en vivo contra "Datos Detallados"): si el
+        # texto cambiara al instante pero Cantidad/Venta T se quedaran en 0
+        # hasta actualizar, la fila se vería inconsistente. Así, las 3
+        # columnas cambian juntas — mientras no se actualice la tabla
+        # dinámica, la fila entera muestra "(Actualizar Tabla Dinámica)".
+        #
         # TRADE-OFF ACEPTADO POR EL CLIENTE: al quedar enlazado a la tabla
         # dinámica, el Consolidado hereda su misma limitación — no se
         # recalcula solo al editar "Datos Detallados", hace falta actualizar
@@ -2651,10 +2658,17 @@ def generate_report():
             # corrige un producto en "Datos Detallados".
             ws1.cell(row=r_idx, column=7, value=f"='Datos Detallados'!F{ws2_row}")
 
+            # DESCRIPCION también se busca en la Tabla Dinámica (por nombre, vía G) en vez
+            # de leerse en vivo de "Datos Detallados": si quedara en vivo, la descripción
+            # cambiaría al instante al corregir un producto pero Cantidad/Venta T se
+            # quedarían en 0 hasta actualizar la tabla dinámica — una fila con texto nuevo
+            # y números en 0 confunde. Con esto, las 3 columnas cambian juntas: mientras la
+            # tabla dinámica no se actualice, toda la fila muestra el aviso de abajo.
+            desc_lookup = f"INDEX('Tabla Dinámica'!$A${pivot_row_start}:$A${pivot_row_end}, MATCH(G{r_idx}, 'Tabla Dinámica'!$A${pivot_row_start}:$A${pivot_row_end}, 0))"
             if row['ES_PROMO']:
-                desc_formula = f"='Datos Detallados'!F{ws2_row}&\" (PROMO)\""
+                desc_formula = f"=IFERROR({desc_lookup}&\" (PROMO)\", \"(Actualizar Tabla Dinámica)\")"
             else:
-                desc_formula = f"='Datos Detallados'!F{ws2_row}"
+                desc_formula = f"=IFERROR({desc_lookup}, \"(Actualizar Tabla Dinámica)\")"
 
             ws1.cell(row=r_idx, column=3, value=desc_formula).alignment = Alignment(horizontal="center", vertical="center")
             ws1.cell(row=r_idx, column=5, value=f"=IFERROR(INDEX('Tabla Dinámica'!$B${pivot_row_start}:$B${pivot_row_end}, MATCH(G{r_idx}, 'Tabla Dinámica'!$A${pivot_row_start}:$A${pivot_row_end}, 0)), 0)").alignment = Alignment(horizontal="center", vertical="center")
