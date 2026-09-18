@@ -3,3 +3,4 @@ pandas>=2.0.0
 rapidfuzz>=3.0.0
 openpyxl>=3.1.0
 gunicorn>=21.2.0
+git+https://github.com/ninohardt/openpyxl-pivots.git@e599ad9160664bb1af20f24670a558d99dedb527

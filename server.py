@@ -29,6 +29,17 @@ from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.chart import PieChart, Reference, BarChart
 from openpyxl.chart.label import DataLabelList
 from openpyxl.utils import get_column_letter
+# Tabla dinámica nativa de Excel (sesión 22, a pedido del cliente) — librería
+# de terceros, experimental, fijada a un commit específico en
+# requirements.txt. install() agrega el método add_pivot_table() a
+# Worksheet; si la librería no está disponible por algún motivo, el resto
+# del sistema sigue funcionando igual (esa tabla específica simplemente no
+# se genera, ver el try/except donde se usa).
+try:
+    from openpyxl_pivots import install as _install_openpyxl_pivots
+    _install_openpyxl_pivots()
+except Exception:
+    pass
 
 app = Flask(__name__, template_folder='templates', static_folder='static')
 
@@ -2569,58 +2580,19 @@ def generate_report():
         for col_idx in range(2, 8):
             ws1.cell(row=eff_row, column=col_idx).border = no_border
             
-        current_row += 2 # Dejamos espacio para la Tabla Dinámica
-
-        # --- TABLA DINÁMICA (a pedido del cliente, sesión 21 — reestructurada) ---
-        # Se agrupa por Descripción sola desde la Tabla 1 (la primera tabla
-        # descriptiva), ordenada por Cantidad de mayor a menor. El
-        # Consolidado (más abajo) ya no calcula nada por su cuenta — se
-        # alimenta de ESTA tabla por referencia directa entre celdas.
-        td_title_row = current_row
-        ws1.cell(row=td_title_row, column=3, value=f"TABLA DINÁMICA {empresa_input.upper()} {sucursal.upper().replace('_', ' ')}")
-        ws1.merge_cells(start_row=td_title_row, start_column=3, end_row=td_title_row, end_column=5)
-        for col_idx in range(3, 6):
-            c = ws1.cell(row=td_title_row, column=col_idx)
-            c.font = font_header
-            c.fill = fill_header
-            c.border = thin_border
-            c.alignment = Alignment(horizontal="center", vertical="center")
-        ws1.row_dimensions[td_title_row].height = 26
-
-        headers_td = ['DESCRIPCION', 'SUMA CANTIDAD', 'SUMA VENTA TOTAL']
-        for col_idx, h in enumerate(headers_td, start=3):
-            cell = ws1.cell(row=td_title_row + 1, column=col_idx, value=h)
-            cell.font = font_subtitles
-            cell.fill = fill_subtitles
-            cell.alignment = Alignment(horizontal="center", vertical="center")
-            cell.border = thin_border
-        ws1.row_dimensions[td_title_row + 1].height = 24
-
-        td_data_start = td_title_row + 2
-        for idx, row in df_t2.iterrows():
-            r_idx = td_data_start + idx
-            p_name = row['Producto']
-            t1_row = prod_to_t1_row.get(p_name, t1_start_row)
-
-            ws1.cell(row=r_idx, column=3, value=f"=C{t1_row}").alignment = Alignment(horizontal="center", vertical="center")
-            ws1.cell(row=r_idx, column=4, value=f"=SUMIF(C${t1_start_row}:C${t1_end_hour_row}, C{r_idx}, E${t1_start_row}:E${t1_end_hour_row})").alignment = Alignment(horizontal="center", vertical="center")
-            ws1.cell(row=r_idx, column=5, value=f"=SUMIF(C${t1_start_row}:C${t1_end_hour_row}, C{r_idx}, F${t1_start_row}:F${t1_end_hour_row})").number_format = '$#,##0'
-            ws1.cell(row=r_idx, column=5).alignment = Alignment(horizontal="center", vertical="center")
-            for col_idx in range(3, 6):
-                c = ws1.cell(row=r_idx, column=col_idx)
-                c.font = font_data
-                c.border = thin_border
-                if r_idx % 2 == 1:
-                    c.fill = fill_zebra
-
-        td_last_row = td_data_start + len(df_t2) - 1
-        current_row = td_last_row + 2  # Dejamos espacio para el Consolidado
+        current_row += 2 # Dejamos espacio para el Consolidado
 
         # --- TABLA 2: Consolidado de Ventas por Producto ---
-        # FIX (a pedido del cliente, sesión 21): el Consolidado ya no calcula
-        # nada por su cuenta (ni fórmula a "Datos Detallados", ni SUMIF) —
-        # se alimenta de la Tabla Dinámica de arriba por referencia directa
-        # entre celdas. Precio = Venta Total / Cantidad, calculado acá.
+        # FIX (a pedido del cliente, sesión 22): la Tabla Dinámica ahora es
+        # NATIVA de Excel de verdad (ver hoja "Tabla Dinámica" — 2 tablas
+        # dinámicas reales, con Actualizar automático), no una tabla armada
+        # con fórmulas. Como una tabla dinámica real puede reordenar sus
+        # propias filas al actualizarse, el Consolidado NO puede depender de
+        # referencias fijas a esas celdas — así que vuelve a calcular
+        # Cantidad y Venta Total por su cuenta, en vivo contra "Datos
+        # Detallados" (mismo mecanismo robusto de la sesión 18: columna
+        # auxiliar oculta G con el nombre limpio, para que el SUMIF no se
+        # rompa con el tag "(PROMO)"). Precio = Venta Total / Cantidad.
         t2_title_row = current_row
         ws1.cell(row=t2_title_row, column=3, value=f"CONSOLIDADO EDM {empresa_input.upper()} {sucursal.upper().replace('_', ' ')}")
         ws1.merge_cells(start_row=t2_title_row, start_column=3, end_row=t2_title_row, end_column=6)
@@ -2641,19 +2613,34 @@ def generate_report():
             cell.border = thin_border
         ws1.row_dimensions[t2_title_row+1].height = 24
 
+        # Map PRODUCTO_CORRECTO to its first row index in Datos Detallados (starting at 2)
+        prod_to_row_idx = {}
+        for i, f_row in enumerate(df_filtered.itertuples()):
+            p_name = getattr(f_row, 'PRODUCTO_CORRECTO')
+            if p_name not in prod_to_row_idx:
+                prod_to_row_idx[p_name] = i + 2
+        raw_last_row = len(df_filtered) + 1
+
         t2_data_start = t2_title_row + 2
         for idx, row in df_t2.iterrows():
             r_idx = t2_data_start + idx
-            td_row = td_data_start + idx  # misma posición/orden que la Tabla Dinámica
+            p_name = row['Producto']
+            ws2_row = prod_to_row_idx.get(p_name, 2)
+
+            # Columna G (oculta): nombre limpio como fórmula en vivo, sin el
+            # tag "(PROMO)" — el SUMIF usa esta celda como criterio en vez
+            # de un texto congelado, para que se recalcule solo si se
+            # corrige un producto en "Datos Detallados".
+            ws1.cell(row=r_idx, column=7, value=f"='Datos Detallados'!F{ws2_row}")
 
             if row['ES_PROMO']:
-                desc_formula = f"=C{td_row}&\" (PROMO)\""
+                desc_formula = f"='Datos Detallados'!F{ws2_row}&\" (PROMO)\""
             else:
-                desc_formula = f"=C{td_row}"
+                desc_formula = f"='Datos Detallados'!F{ws2_row}"
 
             ws1.cell(row=r_idx, column=3, value=desc_formula).alignment = Alignment(horizontal="center", vertical="center")
-            ws1.cell(row=r_idx, column=5, value=f"=D{td_row}").alignment = Alignment(horizontal="center", vertical="center")
-            ws1.cell(row=r_idx, column=6, value=f"=E{td_row}").number_format = '$#,##0'
+            ws1.cell(row=r_idx, column=5, value=f"=SUMIF('Datos Detallados'!F$2:F${raw_last_row}, G{r_idx}, 'Datos Detallados'!J$2:J${raw_last_row})").alignment = Alignment(horizontal="center", vertical="center")
+            ws1.cell(row=r_idx, column=6, value=f"=SUMIF('Datos Detallados'!F$2:F${raw_last_row}, G{r_idx}, 'Datos Detallados'!K$2:K${raw_last_row})").number_format = '$#,##0'
             ws1.cell(row=r_idx, column=6).alignment = Alignment(horizontal="center", vertical="center")
             ws1.cell(row=r_idx, column=4, value=f"=IF(E{r_idx}=0, 0, ROUND(F{r_idx}/E{r_idx}, 2))").number_format = '$#,##0.00'
             ws1.cell(row=r_idx, column=4).alignment = Alignment(horizontal="center", vertical="center")
@@ -2665,6 +2652,7 @@ def generate_report():
                     c.fill = fill_zebra
                     
         t2_last_prod_row = t2_data_start + len(df_t2) - 1
+        ws1.column_dimensions['G'].hidden = True
         
         # TOTAL CONTEO (TABLA 2)
         current_t2_row = t2_last_prod_row + 1
@@ -3000,25 +2988,45 @@ def generate_report():
             ws2.cell(row=raw_row_idx, column=1, value=row['ID_Envio']).alignment = Alignment(horizontal="center", vertical="center")
             ws2.cell(row=raw_row_idx, column=2, value=row['Fecha']).alignment = Alignment(horizontal="center", vertical="center")
             ws2.cell(row=raw_row_idx, column=3, value=formatear_horario_lindo(row['Horario'])).alignment = Alignment(horizontal="center", vertical="center")
-            ws2.cell(row=raw_row_idx, column=4, value=row['Producto']).alignment = Alignment(horizontal="center", vertical="center")
-            ws2.cell(row=raw_row_idx, column=5, value=row['Marca']).alignment = Alignment(horizontal="center", vertical="center")
+            # FIX (sesión 22): "Producto"/"Marca" pueden venir vacíos (NaN) en
+            # algunas filas reales — se pasan a texto vacío en vez de dejar
+            # un NaN/float suelto, porque una columna con tipos mezclados
+            # (texto + NaN) rompe la tabla dinámica nativa más abajo.
+            producto_campo_val = '' if pd.isna(row['Producto']) else row['Producto']
+            marca_campo_val = '' if pd.isna(row['Marca']) else row['Marca']
+            ws2.cell(row=raw_row_idx, column=4, value=producto_campo_val).alignment = Alignment(horizontal="center", vertical="center")
+            ws2.cell(row=raw_row_idx, column=5, value=marca_campo_val).alignment = Alignment(horizontal="center", vertical="center")
             ws2.cell(row=raw_row_idx, column=6, value=row['PRODUCTO_CORRECTO']).alignment = Alignment(horizontal="center", vertical="center")
             ws2.cell(row=raw_row_idx, column=7, value=row['MARCA_MAESTRA']).alignment = Alignment(horizontal="center", vertical="center")
             ws2.cell(row=raw_row_idx, column=8, value=row['CATEGORIA']).alignment = Alignment(horizontal="center", vertical="center")
             ws2.cell(row=raw_row_idx, column=9, value=round_half_up(float(row['PRECIO_MAESTRO']))).number_format = '$#,##0'
             ws2.cell(row=raw_row_idx, column=9).alignment = Alignment(horizontal="center", vertical="center")
             ws2.cell(row=raw_row_idx, column=10, value=int(row['Cantidad'])).alignment = Alignment(horizontal="center", vertical="center")
-            ws2.cell(row=raw_row_idx, column=11, value=f"=ROUND(I{raw_row_idx} * J{raw_row_idx}, 0)").number_format = '$#,##0'
+            # FIX (sesión 22): antes esto era la fórmula "=ROUND(I*J,0)" —
+            # se cambia a un valor ya calculado, porque la tabla dinámica
+            # nativa no puede leer fórmulas como fuente de datos (las
+            # rechaza directamente). El Consolidado sigue funcionando igual
+            # (el SUMIF suma valores, sea que la celda tenga fórmula o no).
+            venta_total_val = round_half_up(float(row['PRECIO_MAESTRO']) * int(row['Cantidad']))
+            ws2.cell(row=raw_row_idx, column=11, value=venta_total_val).number_format = '$#,##0'
             ws2.cell(row=raw_row_idx, column=11).alignment = Alignment(horizontal="center", vertical="center")
             
+            # FIX (sesión 22): "Factura" tiene NaN mezclado con números en
+            # datos históricos (de antes de que el campo fuera obligatorio
+            # en Kobo) — se usa 0 como valor consistente en vez de dejar la
+            # columna con tipos mezclados, por la misma razón que
+            # Producto/Marca más arriba.
             fact_val = row['Factura']
             if not pd.isna(fact_val):
                 try:
                     fact_val = int(float(fact_val))
                 except Exception:
-                    pass
+                    fact_val = 0
+            else:
+                fact_val = 0
             ws2.cell(row=raw_row_idx, column=12, value=fact_val).alignment = Alignment(horizontal="center", vertical="center")
-            ws2.cell(row=raw_row_idx, column=13, value=row['Visitas']).alignment = Alignment(horizontal="center", vertical="center")
+            visitas_val = 0 if pd.isna(row['Visitas']) else row['Visitas']
+            ws2.cell(row=raw_row_idx, column=13, value=visitas_val).alignment = Alignment(horizontal="center", vertical="center")
             ws2.cell(row=raw_row_idx, column=14, value="SÍ" if row['ES_PROMO'] else "NO").alignment = Alignment(horizontal="center", vertical="center")
             ws2.cell(row=raw_row_idx, column=15, value="SÍ" if row['ES_MARCA_PROPIA'] else "NO").alignment = Alignment(horizontal="center", vertical="center")
             ws2.cell(row=raw_row_idx, column=16, value=round_half_up(float(row['VENTA_PROYECTADA']))).number_format = '$#,##0'
@@ -3040,6 +3048,49 @@ def generate_report():
                 if len(val_str) > max_len:
                     max_len = len(val_str)
             ws2.column_dimensions[col_letter].width = min(max(max_len + 3, 10), 30)
+
+        # --- TABLA DINÁMICA NATIVA DE EXCEL (a pedido del cliente, sesión 22) ---
+        # A diferencia de las demás tablas de este archivo, ESTA sí es una
+        # tabla dinámica real de Excel (no armada con fórmulas) — usa la
+        # librería de terceros "openpyxl-pivots" (experimental, fijada a un
+        # commit específico en requirements.txt para que no cambie sola).
+        # Se arman 2 tablas dinámicas nativas (Suma de Cantidad y Suma de
+        # Venta Total) — esta versión de la librería solo soporta un campo
+        # de valor por tabla dinámica, por eso son dos en vez de una con
+        # ambas columnas juntas. Las dos toman como fuente "Datos
+        # Detallados" completa (que es texto/número plano, no fórmulas —
+        # la librería no puede leer fórmulas) y quedan con actualización
+        # automática activada (refresh_on_load), así que al abrir el
+        # archivo en Excel después de corregir algo en "Datos Detallados",
+        # se recalculan solas sin que el cliente tenga que hacer nada.
+        #
+        # LIMITACIÓN CONOCIDA: no se puede fijar el orden de mayor a menor
+        # desde acá — la tabla sale ordenada por orden de aparición en
+        # "Datos Detallados". Se ordena una vez con un clic en Excel
+        # (clic derecho sobre la columna de valores → Ordenar → De mayor a
+        # menor) y Excel recuerda ese orden en las próximas actualizaciones.
+        try:
+            ultima_fila_dd = raw_row_idx - 1
+            rango_fuente = f"'Datos Detallados'!A1:P{ultima_fila_dd}"
+            ws_pivot = wb.create_sheet(title="Tabla Dinámica")
+            ws_pivot.add_pivot_table(
+                source=rango_fuente,
+                destination="A3",
+                name="PivotCantidad",
+                row="Producto Estandarizado",
+                value="Cantidad",
+            )
+            ws_pivot.add_pivot_table(
+                source=rango_fuente,
+                destination="E3",
+                name="PivotVentaTotal",
+                row="Producto Estandarizado",
+                value="Venta Total ($)",
+            )
+            ws_pivot.cell(row=1, column=1, value="Suma de Cantidad").font = font_bold
+            ws_pivot.cell(row=1, column=5, value="Suma de Venta Total").font = font_bold
+        except Exception as e:
+            app.logger.warning(f"No se pudo crear la tabla dinámica nativa: {e}")
 
         # --- Pestaña de DESCUENTO si aplica ---
         if large_invoices:
