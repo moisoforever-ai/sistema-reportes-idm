@@ -2583,41 +2583,26 @@ def generate_report():
         current_row += 2 # Dejamos espacio para el Consolidado
 
         # --- TABLA 2: Consolidado de Ventas por Producto ---
-        # FIX (a pedido del cliente, sesión 23): Cantidad y Venta Total del
-        # Consolidado ahora se leen DE la Tabla Dinámica nativa (hoja "Tabla
-        # Dinámica"), no se recalculan aparte contra "Datos Detallados". Se
-        # usa INDEX/MATCH por nombre de producto (columna oculta G, ver
-        # abajo) en vez de una referencia fija de celda, porque una tabla
-        # dinámica real puede reordenar sus filas al actualizarse — así el
-        # Consolidado sigue encontrando el producto correcto sin importar en
-        # qué fila haya quedado. Precio = Venta Total / Cantidad.
+        # FIX (a pedido explícito del cliente, sesión 23): Descripción, Cantidad y Venta T
+        # del Consolidado se leen con REFERENCIA FIJA de celda a la Tabla Dinámica nativa
+        # (ej. ='Tabla Dinámica'!A5), no con búsqueda por nombre (INDEX/MATCH). El cliente
+        # pidió esto explícitamente después de que le advertí el riesgo por escrito y lo
+        # confirmó: si la tabla dinámica reordena sus filas al actualizarse (Excel puede
+        # hacerlo solo, no se controla desde acá), una fila del Consolidado puede terminar
+        # mostrando los números de OTRO producto sin ningún aviso. Para que el archivo
+        # arranque bien alineado la PRIMERA vez, acá mismo se calcula "pivot_row_of":
+        # a qué fila de la Tabla Dinámica va a ir a parar cada producto, replicando el
+        # mismo orden que usa la librería openpyxl-pivots (orden de primera aparición en
+        # "Datos Detallados", que a su vez está ordenado por HORA_ORDEN — ver línea ~2107).
+        # Si el archivo se abre, se edita "Datos Detallados" y se actualiza la tabla
+        # dinámica, esa alineación por fila puede desincronizarse — responsabilidad
+        # aceptada por el cliente.
         #
-        # DESCRIPCION también sale de la Tabla Dinámica con el mismo
-        # INDEX/MATCH (no se deja en vivo contra "Datos Detallados"): si el
-        # texto cambiara al instante pero Cantidad/Venta T se quedaran en 0
-        # hasta actualizar, la fila se vería inconsistente. Así, las 3
-        # columnas cambian juntas — mientras no se actualice la tabla
-        # dinámica, la fila entera muestra "(Actualizar Tabla Dinámica)".
-        #
-        # TRADE-OFF ACEPTADO POR EL CLIENTE: al quedar enlazado a la tabla
-        # dinámica, el Consolidado hereda su misma limitación — no se
-        # recalcula solo al editar "Datos Detallados", hace falta actualizar
-        # la tabla dinámica (clic derecho → Actualizar) o cerrar y reabrir el
-        # archivo (queda con refresh_on_load activado). Antes (sesión 18-22)
-        # el Consolidado sí era 100% instantáneo vía SUMIF directo; se
-        # cambia a pedido explícito del cliente para que un producto
-        # realmete nuevo (sin fila previa en Datos Detallados) también
-        # pueda reflejarse acá tras actualizar la tabla dinámica.
-        #
-        # LIMITACIÓN QUE SIGUE EXISTIENDO: el Consolidado tiene un número
-        # FIJO de filas (una por producto distinto al momento de generar el
-        # reporte). Si aparece un producto TOTALMENTE nuevo en "Datos
-        # Detallados" (sin ninguna fila previa igual), la Tabla Dinámica sí
-        # va a mostrarlo al actualizar, pero el Consolidado no puede crear
-        # una fila nueva por su cuenta — para eso hace falta generar el
-        # reporte de nuevo desde el sistema web.
+        # Precio = Venta Total / Cantidad, calculado en el propio Consolidado (no viene de
+        # la Tabla Dinámica, que no tiene una columna de Precio).
         pivot_row_start = 4  # fila 3 = encabezado de la tabla dinámica, datos desde la 4
-        pivot_row_end = pivot_row_start + len(df_t2) + 200  # margen para productos nuevos tras refrescar
+        orden_aparicion = df_filtered['PRODUCTO_CORRECTO'].drop_duplicates().tolist()
+        pivot_row_of = {p_name: pivot_row_start + i for i, p_name in enumerate(orden_aparicion)}
         t2_title_row = current_row
         ws1.cell(row=t2_title_row, column=3, value=f"CONSOLIDADO EDM {empresa_input.upper()} {sucursal.upper().replace('_', ' ')}")
         ws1.merge_cells(start_row=t2_title_row, start_column=3, end_row=t2_title_row, end_column=6)
@@ -2638,41 +2623,25 @@ def generate_report():
             cell.border = thin_border
         ws1.row_dimensions[t2_title_row+1].height = 24
 
-        # Map PRODUCTO_CORRECTO to its first row index in Datos Detallados (starting at 2)
-        prod_to_row_idx = {}
-        for i, f_row in enumerate(df_filtered.itertuples()):
-            p_name = getattr(f_row, 'PRODUCTO_CORRECTO')
-            if p_name not in prod_to_row_idx:
-                prod_to_row_idx[p_name] = i + 2
-        raw_last_row = len(df_filtered) + 1
-
         t2_data_start = t2_title_row + 2
         for idx, row in df_t2.iterrows():
             r_idx = t2_data_start + idx
             p_name = row['Producto']
-            ws2_row = prod_to_row_idx.get(p_name, 2)
+            # Fila fija en "Tabla Dinámica" que le corresponde a este producto al momento
+            # de generar el reporte (ver pivot_row_of más arriba). Si el producto no
+            # aparece en df_filtered por algún motivo (no debería pasar, ambos vienen del
+            # mismo origen), se usa pivot_row_start como resguardo para no romper el
+            # archivo — esa fila mostraría el producto equivocado y habría que revisar.
+            p_row = pivot_row_of.get(p_name, pivot_row_start)
 
-            # Columna G (oculta): nombre limpio como fórmula en vivo, sin el
-            # tag "(PROMO)" — el SUMIF usa esta celda como criterio en vez
-            # de un texto congelado, para que se recalcule solo si se
-            # corrige un producto en "Datos Detallados".
-            ws1.cell(row=r_idx, column=7, value=f"='Datos Detallados'!F{ws2_row}")
-
-            # DESCRIPCION también se busca en la Tabla Dinámica (por nombre, vía G) en vez
-            # de leerse en vivo de "Datos Detallados": si quedara en vivo, la descripción
-            # cambiaría al instante al corregir un producto pero Cantidad/Venta T se
-            # quedarían en 0 hasta actualizar la tabla dinámica — una fila con texto nuevo
-            # y números en 0 confunde. Con esto, las 3 columnas cambian juntas: mientras la
-            # tabla dinámica no se actualice, toda la fila muestra el aviso de abajo.
-            desc_lookup = f"INDEX('Tabla Dinámica'!$A${pivot_row_start}:$A${pivot_row_end}, MATCH(G{r_idx}, 'Tabla Dinámica'!$A${pivot_row_start}:$A${pivot_row_end}, 0))"
             if row['ES_PROMO']:
-                desc_formula = f"=IFERROR({desc_lookup}&\" (PROMO)\", \"(Actualizar Tabla Dinámica)\")"
+                desc_formula = f"='Tabla Dinámica'!A{p_row}&\" (PROMO)\""
             else:
-                desc_formula = f"=IFERROR({desc_lookup}, \"(Actualizar Tabla Dinámica)\")"
+                desc_formula = f"='Tabla Dinámica'!A{p_row}"
 
             ws1.cell(row=r_idx, column=3, value=desc_formula).alignment = Alignment(horizontal="center", vertical="center")
-            ws1.cell(row=r_idx, column=5, value=f"=IFERROR(INDEX('Tabla Dinámica'!$B${pivot_row_start}:$B${pivot_row_end}, MATCH(G{r_idx}, 'Tabla Dinámica'!$A${pivot_row_start}:$A${pivot_row_end}, 0)), 0)").alignment = Alignment(horizontal="center", vertical="center")
-            ws1.cell(row=r_idx, column=6, value=f"=IFERROR(INDEX('Tabla Dinámica'!$F${pivot_row_start}:$F${pivot_row_end}, MATCH(G{r_idx}, 'Tabla Dinámica'!$E${pivot_row_start}:$E${pivot_row_end}, 0)), 0)").number_format = '$#,##0'
+            ws1.cell(row=r_idx, column=5, value=f"='Tabla Dinámica'!B{p_row}").alignment = Alignment(horizontal="center", vertical="center")
+            ws1.cell(row=r_idx, column=6, value=f"='Tabla Dinámica'!F{p_row}").number_format = '$#,##0'
             ws1.cell(row=r_idx, column=6).alignment = Alignment(horizontal="center", vertical="center")
             ws1.cell(row=r_idx, column=4, value=f"=IF(E{r_idx}=0, 0, ROUND(F{r_idx}/E{r_idx}, 2))").number_format = '$#,##0.00'
             ws1.cell(row=r_idx, column=4).alignment = Alignment(horizontal="center", vertical="center")
@@ -2682,10 +2651,9 @@ def generate_report():
                 c.border = thin_border
                 if r_idx % 2 == 1:
                     c.fill = fill_zebra
-                    
+
         t2_last_prod_row = t2_data_start + len(df_t2) - 1
-        ws1.column_dimensions['G'].hidden = True
-        
+
         # TOTAL CONTEO (TABLA 2)
         current_t2_row = t2_last_prod_row + 1
         ws1.cell(row=current_t2_row, column=3, value="TOTAL CONTEO").font = font_bold
