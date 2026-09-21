@@ -2623,9 +2623,15 @@ def generate_report():
         # dinámica, esa alineación por fila puede desincronizarse — responsabilidad
         # aceptada por el cliente.
         #
-        # Precio = Venta Total / Cantidad, calculado en el propio Consolidado (no viene de
-        # la Tabla Dinámica, que no tiene una columna de Precio).
-        pivot_row_start = 4  # fila 3 = encabezado de la tabla dinámica, datos desde la 4
+        # FIX (sesión 25, a pedido del cliente): la fila base estaba en 4 (asumiendo
+        # encabezado de la tabla dinámica en la fila 3, datos desde la 4), pero el cliente
+        # reportó viendo la tabla dinámica real ya abierta en Excel que sus datos arrancan
+        # una fila antes de lo asumido — con base 4, la última fila de productos caía
+        # exactamente sobre el encabezado de la tabla dinámica ("Producto Estandarizado" /
+        # "Total"), mostrando #¡VALOR! en Precio y perdiendo un producto completo del
+        # Consolidado (el total ya no cuadraba con el de la tabla dinámica). Ajustado a 3
+        # según lo confirmado por el cliente contra el archivo real.
+        pivot_row_start = 3  # datos de la tabla dinámica arrancan en la fila 3
         orden_aparicion = df_filtered['PRODUCTO_CORRECTO'].drop_duplicates().tolist()
         pivot_row_of = {p_name: pivot_row_start + i for i, p_name in enumerate(orden_aparicion)}
         t2_title_row = current_row
