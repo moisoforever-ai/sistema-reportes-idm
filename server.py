@@ -196,7 +196,7 @@ def is_logged_in():
     return 'user' in session
 
 # --- GOOGLE SHEETS GIDS ---
-GID_TIPIFICACIONES = "1075896827"
+GID_TIPIFICACIONES = "1109198771"
 GID_BASE_DAKA = "1240474880"
 GID_BASE_DAMASCO = "841459536"
 GID_BASE_MULTIMAX = "2089283830"
@@ -263,7 +263,20 @@ COLOR_FUERA_PROMO = "ED7D31"        # accent2 naranja - porción "Fuera de Promo
 # apuntando al token viejo (por eso "TIPIFICACIONES" volvió a funcionar pero el
 # maestro de precios de Daka siguió dando error). Ahora es una sola constante
 # (PUBLISH_DOC_TOKEN) que se usa en los 3 lugares, para que esto no se repita.
-PUBLISH_DOC_TOKEN = "2PACX-1vR26tv7s2rVM2NfwdaK48YHZTsCW8X2IpkiFFC8zXmBB4ZR9ft5otBoXNg2cK-4oIKnnVDzTYKLgC4_"
+#
+# FIX (sesión 25): el token de arriba (2PACX-1vR26tv7s2...) era incorrecto —
+# se había adivinado sin verificar contra el diálogo real de "Publicar en la
+# web", y devolvía 401 en Daka/Damasco/Multimax (solo TIPIFICACIONES coincidía
+# por casualidad, con un gid distinto al real). El token correcto verificado
+# ahora es, otra vez, el que antes se creía "muerto" (2PACX-1vTfq8...): no
+# había cambiado de verdad, el problema era que la publicación estaba detenida
+# y/o el token se había transcrito mal a mano desde una captura de pantalla
+# (fuente de ambigüedad clásica: "O" letra vs "0" cero, "I" vs "l" vs "1").
+# Verificado por captura de pantalla + copia de texto real del diálogo, y
+# confirmado con los 4 gids devolviendo 302 (redirección válida a CSV), no
+# 400/401/404. El gid de TIPIFICACIONES también cambió (esa pestaña se había
+# recreado): ver GID_TIPIFICACIONES arriba. Los otros 3 gids no cambiaron.
+PUBLISH_DOC_TOKEN = "2PACX-1vTfq81DhLQ_8jkbFIAs7OWaO7qkYRis350TTRz_BbbsVucVw4K87Ai0YgiynRIQG1CqRJv9i1V6oEDo"
 URL_TIPIFICACIONES = f"https://docs.google.com/spreadsheets/d/e/{PUBLISH_DOC_TOKEN}/pub?gid={GID_TIPIFICACIONES}&single=true&output=csv"
 
 # --- HELPER FUNCTIONS ---

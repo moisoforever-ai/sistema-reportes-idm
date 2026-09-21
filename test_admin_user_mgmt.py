@@ -1,6 +1,7 @@
 import unittest
 import os
 import json
+from werkzeug.security import check_password_hash
 from server import app, USERS_FILE, load_users
 
 class TestAdminUserMgmt(unittest.TestCase):
@@ -56,9 +57,14 @@ class TestAdminUserMgmt(unittest.TestCase):
         self.assertIn(b"newuser", response.data)
         
         # 3. Verify user is saved in users.json
+        # FIX (sesión 25): desde el fix de seguridad de contraseñas, /admin/users
+        # guarda los usuarios nuevos ya hasheados (generate_password_hash), nunca
+        # en texto plano — comparar con == "newpassword" fallaba siempre porque
+        # el valor guardado es un hash scrypt. Se verifica con check_password_hash,
+        # igual que hace el propio login.
         users = load_users()
         self.assertIn("newuser", users)
-        self.assertEqual(users["newuser"], "newpassword")
+        self.assertTrue(check_password_hash(users["newuser"], "newpassword"))
         
         # 4. Log out and try logging in as newuser
         self.app.get('/logout')

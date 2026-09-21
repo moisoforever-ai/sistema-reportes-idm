@@ -1,6 +1,25 @@
 import unittest
 import json
+from unittest.mock import patch
+import pandas as pd
 from server import app
+
+# FIX (sesión 25): test_reactive_options_structure le pegaba directo a
+# fetch_data() sin mockear, es decir, a Google Sheets en vivo. Dentro de
+# este entorno de trabajo no hay salida a internet (proxy la bloquea), así
+# que fetch_data fallaba y el endpoint devolvía 400 en vez de 200 — nada que
+# ver con un bug real. Se mockea igual que en test_endpoints.py, con datos
+# sintéticos armados para que coincidan exactamente con lo que el test ya
+# esperaba (las sucursales de Damasco en esas 2 fechas).
+MOCK_DF_CAMPO_REACTIVE = pd.DataFrame([
+    {'Fecha': '23/06/2026', 'Empresa': 'ddamasco', 'Sucursal': 'TRINIDAD - DAMASCO'},
+    {'Fecha': '23/06/2026', 'Empresa': 'ddamasco', 'Sucursal': 'PARAISO - DAMASCO'},
+    {'Fecha': '26/06/2026', 'Empresa': 'ddamasco', 'Sucursal': 'APURE - DAMASCO'},
+    {'Fecha': '26/06/2026', 'Empresa': 'ddamasco', 'Sucursal': 'AV BOLIVAR VALENCIA - DAMASCO'},
+])
+
+def mock_fetch_data_reactive(gid_base=None, force_sync=False):
+    return MOCK_DF_CAMPO_REACTIVE, pd.DataFrame()
 
 class TestAuthAndReactive(unittest.TestCase):
     def setUp(self):
@@ -51,7 +70,8 @@ class TestAuthAndReactive(unittest.TestCase):
         response = self.app.get('/')
         self.assertEqual(response.status_code, 302)
 
-    def test_reactive_options_structure(self):
+    @patch('server.fetch_data', side_effect=mock_fetch_data_reactive)
+    def test_reactive_options_structure(self, mock_fetch):
         # 1. Log in
         self.app.post('/login', json={"username": "admin", "password": "admin123"})
 
