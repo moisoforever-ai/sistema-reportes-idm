@@ -196,7 +196,7 @@ def is_logged_in():
     return 'user' in session
 
 # --- GOOGLE SHEETS GIDS ---
-GID_TIPIFICACIONES = "1109198771"
+GID_TIPIFICACIONES = "1075896827"
 GID_BASE_DAKA = "1240474880"
 GID_BASE_DAMASCO = "841459536"
 GID_BASE_MULTIMAX = "2089283830"
@@ -252,7 +252,12 @@ COLOR_PROMO = "4472C4"              # accent1 azul - porción "Promo" del pie
 COLOR_FUERA_PROMO = "ED7D31"        # accent2 naranja - porción "Fuera de Promo" del pie
 
 # --- DATA URLS ---
-URL_TIPIFICACIONES = f"https://docs.google.com/spreadsheets/d/e/2PACX-1vTfq81DhLQ_8jkbFIAs7OWaO7qkYRis350TTRz_BbbsVucVw4K87Ai0YgiynRIQG1CqRJv9i1V6oEDo/pub?gid={GID_TIPIFICACIONES}&single=true&output=csv"
+# FIX (sesión 24): el link publicado de "TIPIFICACIONES" cambió — el anterior
+# (2PACX-1vTfq8...gid=1109198771) empezó a devolver HTTP 400, probablemente
+# porque el "Publicar en la web" de esa hoja se detuvo/regeneró en algún momento
+# y Google le asignó una URL pública nueva. Actualizado al link vigente que el
+# cliente confirmó en Google Sheets (Archivo > Compartir > Publicar en la web).
+URL_TIPIFICACIONES = f"https://docs.google.com/spreadsheets/d/e/2PACX-1vR26tv7s2rVM2NfwdaK48YHZTsCW8X2IpkiFFC8zXmBB4ZR9ft5otBoXNg2cK-4oIKnnVDzTYKLgC4_/pub?gid={GID_TIPIFICACIONES}&single=true&output=csv"
 
 # --- HELPER FUNCTIONS ---
 def round_half_up(n):
