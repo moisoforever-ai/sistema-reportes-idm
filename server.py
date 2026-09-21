@@ -2192,15 +2192,37 @@ def generate_report():
         # FIX (a pedido del cliente, sesión 21): se agrupa por Descripción
         # SOLA (antes era Descripción+Precio) — el Precio ya no es una clave
         # de agrupación, se calcula como Venta Total / Cantidad más abajo,
-        # en la propia Tabla Dinámica y en el Consolidado. Orden: cantidad
-        # de mayor a menor (antes era al revés).
+        # en la propia Tabla Dinámica y en el Consolidado.
+        #
+        # FIX (sesión 26, a pedido explícito del cliente): antes df_t2 (y con
+        # él, el Consolidado) se ordenaba por Cantidad de mayor a menor — un
+        # orden que NO tiene relación con el orden en que la Tabla Dinámica
+        # nativa termina colocando esos mismos productos (ella los ordena por
+        # primera aparición en "Datos Detallados", que a su vez está ordenado
+        # por HORA_ORDEN — ver línea ~2132). Esa diferencia de orden era la
+        # causa real de que las referencias fijas ='Tabla Dinámica'!A{n} del
+        # Consolidado apuntaran al producto equivocado.
+        #
+        # El cliente pidió poder escribir la fórmula en la primera fila del
+        # Consolidado y arrastrarla hacia abajo para ver todos los productos;
+        # eso solo funciona si ambas tablas listan los productos en el MISMO
+        # orden. "orden_aparicion" (primera aparición de cada producto — el
+        # mismo orden que usa la librería de la tabla dinámica) se calcula acá
+        # y se usa para ordenar df_t2 también, así la fila 1 del Consolidado
+        # es siempre el mismo producto que la fila 1 de datos de la Tabla
+        # Dinámica, la fila 2 el mismo que la fila 2, y así sucesivamente (ver
+        # el uso de "pivot_row_start + idx" más abajo, junto al Consolidado).
+        orden_aparicion = df_filtered['PRODUCTO_CORRECTO'].drop_duplicates().tolist()
         df_t2 = df_filtered.groupby('PRODUCTO_CORRECTO').agg(
             Cantidad=('Cantidad', 'sum'),
             VentaTotal=('VENTA_TOTAL', 'sum'),
             ES_PROMO=('ES_PROMO', 'first')  # constante dentro del grupo (mismo producto = mismo estado de promo)
         ).reset_index()
         df_t2.columns = ['Producto', 'Cantidad', 'Venta Total', 'ES_PROMO']
-        df_t2 = df_t2.sort_values(by='Cantidad', ascending=False).reset_index(drop=True)
+        # Orden = mismo orden que la Tabla Dinámica (orden_aparicion), NO por Cantidad.
+        _orden_map = {p: i for i, p in enumerate(orden_aparicion)}
+        df_t2['_orden_pivot'] = df_t2['Producto'].map(_orden_map)
+        df_t2 = df_t2.sort_values(by='_orden_pivot').drop(columns=['_orden_pivot']).reset_index(drop=True)
         
         # Large sales discount
         large_invoices_sum = 0.0
@@ -2614,26 +2636,40 @@ def generate_report():
         # pidió esto explícitamente después de que le advertí el riesgo por escrito y lo
         # confirmó: si la tabla dinámica reordena sus filas al actualizarse (Excel puede
         # hacerlo solo, no se controla desde acá), una fila del Consolidado puede terminar
-        # mostrando los números de OTRO producto sin ningún aviso. Para que el archivo
-        # arranque bien alineado la PRIMERA vez, acá mismo se calcula "pivot_row_of":
-        # a qué fila de la Tabla Dinámica va a ir a parar cada producto, replicando el
-        # mismo orden que usa la librería openpyxl-pivots (orden de primera aparición en
-        # "Datos Detallados", que a su vez está ordenado por HORA_ORDEN — ver línea ~2107).
-        # Si el archivo se abre, se edita "Datos Detallados" y se actualiza la tabla
-        # dinámica, esa alineación por fila puede desincronizarse — responsabilidad
-        # aceptada por el cliente.
+        # mostrando los números de OTRO producto sin ningún aviso.
         #
-        # FIX (sesión 25, a pedido del cliente): la fila base estaba en 4 (asumiendo
-        # encabezado de la tabla dinámica en la fila 3, datos desde la 4), pero el cliente
-        # reportó viendo la tabla dinámica real ya abierta en Excel que sus datos arrancan
-        # una fila antes de lo asumido — con base 4, la última fila de productos caía
-        # exactamente sobre el encabezado de la tabla dinámica ("Producto Estandarizado" /
-        # "Total"), mostrando #¡VALOR! en Precio y perdiendo un producto completo del
-        # Consolidado (el total ya no cuadraba con el de la tabla dinámica). Ajustado a 3
-        # según lo confirmado por el cliente contra el archivo real.
-        pivot_row_start = 3  # datos de la tabla dinámica arrancan en la fila 3
-        orden_aparicion = df_filtered['PRODUCTO_CORRECTO'].drop_duplicates().tolist()
-        pivot_row_of = {p_name: pivot_row_start + i for i, p_name in enumerate(orden_aparicion)}
+        # FIX (sesión 25, a pedido del cliente): la fila base había estado en 4
+        # y luego se probó en 3, ambos incorrectos — con esos valores la última
+        # fila de productos caía sobre el encabezado de la tabla dinámica
+        # ("Producto Estandarizado" / "Total"/"Sum of Cantidad"), mostrando
+        # #¡VALOR! en Precio y perdiendo o corrompiendo productos del
+        # Consolidado.
+        #
+        # FIX (sesión 26, confirmado por el cliente contra DOS archivos reales
+        # distintos — Damasco Paraíso y Daka San Cristóbal): entre la celda de
+        # destino del pivot ("A3") y la primera fila con datos de producto hay
+        # dos filas de encabezado propias de la tabla dinámica nativa (no las
+        # escribe este código, las genera Excel al renderizar el pivot), así
+        # que el primer producto SIEMPRE cae en la fila 5, nunca en la 3 ni en
+        # la 4. El cliente lo repitió explícitamente ("EL 5 ES EL NUMERO
+        # SIEMPRE") tras verificarlo en Excel real, así que se toma como el
+        # valor definitivo.
+        #
+        # FIX (sesión 26, cambio de fondo a pedido explícito del cliente): el patrón
+        # anterior ("pivot_row_of", un diccionario que calculaba una fila distinta por
+        # producto según su posición en "orden_aparicion") fallaba en la práctica aunque
+        # era correcto en teoría, porque df_t2 (orden del Consolidado, por Cantidad) y
+        # orden_aparicion (orden real de la Tabla Dinámica, por primera aparición) NO
+        # coincidían — dos órdenes distintos, un número de fila calculado para uno solo
+        # de ellos. Resultado: cada fila del Consolidado terminaba apuntando a la fila de
+        # OTRO producto. El cliente pidió un modelo más simple y predecible: escribir la
+        # fórmula en la primera fila del Consolidado y "arrastrarla" hacia abajo, dejando
+        # que la referencia de fila avance de uno en uno, igual que hace Excel al
+        # arrastrar una celda. Eso es seguro ahora porque df_t2 se ordena por
+        # "orden_aparicion" en vez de por Cantidad (ver más arriba, junto a donde se arma
+        # df_t2) — mismo orden en las dos tablas, así que la fila de la Tabla Dinámica
+        # para la fila N del Consolidado es, simplemente, pivot_row_start + N.
+        pivot_row_start = 5  # datos de la tabla dinámica arrancan en la fila 5 (confirmado por el cliente)
         t2_title_row = current_row
         ws1.cell(row=t2_title_row, column=3, value=f"CONSOLIDADO EDM {empresa_input.upper()} {sucursal.upper().replace('_', ' ')}")
         ws1.merge_cells(start_row=t2_title_row, start_column=3, end_row=t2_title_row, end_column=6)
@@ -2657,13 +2693,11 @@ def generate_report():
         t2_data_start = t2_title_row + 2
         for idx, row in df_t2.iterrows():
             r_idx = t2_data_start + idx
-            p_name = row['Producto']
-            # Fila fija en "Tabla Dinámica" que le corresponde a este producto al momento
-            # de generar el reporte (ver pivot_row_of más arriba). Si el producto no
-            # aparece en df_filtered por algún motivo (no debería pasar, ambos vienen del
-            # mismo origen), se usa pivot_row_start como resguardo para no romper el
-            # archivo — esa fila mostraría el producto equivocado y habría que revisar.
-            p_row = pivot_row_of.get(p_name, pivot_row_start)
+            # Fila de la Tabla Dinámica que le corresponde a esta fila del Consolidado:
+            # avanza de uno en uno (3, 4, 5...) — es "arrastrar" la fórmula de la primera
+            # fila hacia abajo. Funciona porque df_t2 está ordenado exactamente igual que
+            # la Tabla Dinámica (ver "orden_aparicion" donde se arma df_t2, más arriba).
+            p_row = pivot_row_start + idx
 
             if row['ES_PROMO']:
                 desc_formula = f"='Tabla Dinámica'!A{p_row}&\" (PROMO)\""
