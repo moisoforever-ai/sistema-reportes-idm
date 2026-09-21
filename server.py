@@ -2092,6 +2092,20 @@ def get_options():
         app.logger.error("Exception in get_options", exc_info=True)
         return jsonify({'success': False, 'error': f"No se pudieron cargar los parámetros: {str(e)}"}), 400
 
+# FIX (sesión 27, a pedido del cliente): los títulos de las tablas/gráficas armaban
+# la etiqueta pegando "EMPRESA" + "SUCURSAL" a mano (ej. f"{empresa.upper()}
+# {sucursal.upper()}"). Para Daka eso se veía "DAKA DAKA PUERTO CABELLO" repetido,
+# porque el nombre de sucursal en la hoja de campo YA viene con la empresa adelante
+# ("DAKA PUERTO CABELLO"), a diferencia de Damasco/Multimax que la traen al final
+# ("PARAISO - DAMASCO"). Esta función arma la etiqueta una sola vez y evita la
+# repetición cuando la sucursal ya empieza con el nombre de la empresa.
+def etiqueta_empresa_sucursal(empresa_input, sucursal):
+    emp = empresa_input.upper().strip()
+    suc = sucursal.upper().replace('_', ' ').strip()
+    if suc.startswith(emp):
+        return suc
+    return f"{emp} {suc}"
+
 @app.route('/api/generate', methods=['POST'])
 def generate_report():
     if not is_logged_in():
@@ -2309,17 +2323,17 @@ def generate_report():
             top=Side(style='thin', color='000000'), bottom=Side(style='double', color='000000')
         )
 
-        # Title block
-        empresa_cased = empresa_input.title()
-        sucursal_cased = sucursal.replace('_', ' ').title()
-        ws1['A1'] = f"Reporte EDM {empresa_cased} {sucursal_cased}"
-        ws1['A1'].font = font_title
+        # FIX (sesión 27, a pedido del cliente): se elimina el título "Reporte EDM
+        # ..." de la fila 1 (quedaba redundante con el título de la Tabla 1 en la
+        # fila 4, y además duplicaba el nombre de la empresa para Daka — ver
+        # etiqueta_empresa_sucursal más arriba). La fila 1 queda en blanco a
+        # propósito, como margen visual antes de la línea de parámetros.
         ws1['A2'] = f"Parámetros: Fecha: {fecha} | Empresa: {empresa_input.upper()} | Sucursal: {sucursal.upper()} | Apertura: {hora_apertura_str} | Cierre: {hora_cierre_str}"
         ws1['A2'].font = font_subtitle
         
         # --- TABLA 1: Rendimiento por Horario ---
         t1_title_row = 4
-        ws1.cell(row=t1_title_row, column=2, value=f"EDM {empresa_input.upper()} {sucursal.upper().replace('_', ' ')} {fecha}")
+        ws1.cell(row=t1_title_row, column=2, value=f"EDM {etiqueta_empresa_sucursal(empresa_input, sucursal)} {fecha}")
         ws1.merge_cells(start_row=t1_title_row, start_column=2, end_row=t1_title_row, end_column=7)
         for col_idx in range(2, 8):
             c = ws1.cell(row=t1_title_row, column=col_idx)
@@ -2671,7 +2685,7 @@ def generate_report():
         # para la fila N del Consolidado es, simplemente, pivot_row_start + N.
         pivot_row_start = 5  # datos de la tabla dinámica arrancan en la fila 5 (confirmado por el cliente)
         t2_title_row = current_row
-        ws1.cell(row=t2_title_row, column=3, value=f"CONSOLIDADO EDM {empresa_input.upper()} {sucursal.upper().replace('_', ' ')}")
+        ws1.cell(row=t2_title_row, column=3, value=f"CONSOLIDADO EDM {etiqueta_empresa_sucursal(empresa_input, sucursal)}")
         ws1.merge_cells(start_row=t2_title_row, start_column=3, end_row=t2_title_row, end_column=6)
         for col_idx in range(3, 7):
             c = ws1.cell(row=t2_title_row, column=col_idx)
@@ -2819,7 +2833,7 @@ def generate_report():
 
         # --- TABLA 3: Resumen Promo / Fuera de Promo / Marcas ---
         # Ubicada al centro superior: Columnas I-L, filas 2-4
-        ws1.cell(row=2, column=9, value=f"{empresa_input.upper()} {sucursal.upper().replace('_', ' ')}")
+        ws1.cell(row=2, column=9, value=etiqueta_empresa_sucursal(empresa_input, sucursal))
         ws1.merge_cells(start_row=2, start_column=9, end_row=2, end_column=12)
         for col_idx in range(9, 13):
             c = ws1.cell(row=2, column=col_idx)
@@ -2854,7 +2868,7 @@ def generate_report():
 
         # --- TABLA 4: Ventas por Categoría ---
         # Ubicada a la derecha superior: Columnas N-O, filas 2-15
-        ws1.cell(row=2, column=14, value=f"{empresa_input.upper()} {sucursal.upper().replace('_', ' ')}")
+        ws1.cell(row=2, column=14, value=etiqueta_empresa_sucursal(empresa_input, sucursal))
         ws1.merge_cells(start_row=2, start_column=14, end_row=2, end_column=15)
         for col_idx in range(14, 16):
             c = ws1.cell(row=2, column=col_idx)
@@ -2922,21 +2936,17 @@ def generate_report():
         ws1.column_dimensions['N'].width = 25
         ws1.column_dimensions['O'].width = 15
 
-        # --- ENCABEZADO DE SECCIÓN (separa visualmente las tablas de los gráficos) ---
-        ws1.cell(row=5, column=9, value="GRÁFICAS DE DESEMPEÑO")
-        ws1.merge_cells(start_row=5, start_column=9, end_row=5, end_column=12)
-        c_sec = ws1.cell(row=5, column=9)
-        c_sec.font = font_subtitles
-        c_sec.fill = fill_subtitles
-        c_sec.alignment = Alignment(horizontal="center", vertical="center")
-        ws1.row_dimensions[5].height = 22
+        # FIX (sesión 27, a pedido del cliente): se elimina el rótulo "GRÁFICAS DE
+        # DESEMPEÑO" que separaba las tablas de los gráficos — el cliente no lo
+        # necesita. La fila 5 queda en blanco, sirviendo igual de margen entre la
+        # Tabla 3 (fila 4) y los gráficos (fila 6 en adelante).
 
         # --- ADD CHARTS (Nativos) ---
         # 1. Bar Chart of Promo, Fuera de Promo, Marcas
         chart_bar = BarChart()
         chart_bar.type = "col"
         chart_bar.style = 2
-        chart_bar.title = f"{empresa_input.upper()} {sucursal.upper().replace('_', ' ')}"
+        chart_bar.title = etiqueta_empresa_sucursal(empresa_input, sucursal)
         chart_bar.legend = None # No legend for single-series bar chart as in Imagen 1
         
         # I4:K4 data (row 4 values, row 3 headers)
@@ -2956,7 +2966,16 @@ def generate_report():
         # Remove gridlines
         chart_bar.y_axis.majorGridlines = None
         chart_bar.x_axis.majorGridlines = None
-        
+
+        # FIX (sesión 27, a pedido del cliente): openpyxl deja el atributo "delete"
+        # de los ejes en None por defecto, y Excel a veces interpreta eso como
+        # "ocultar el eje" (el cliente tenía que entrar a Elementos de gráfico →
+        # Ejes y activarlo a mano). Se fija explícito en False para que el eje de
+        # categorías (Promo/Fuera de Promo/Marcas) y el de valores ($) salgan
+        # visibles siempre, sin que el cliente tenga que corregirlo él mismo.
+        chart_bar.x_axis.delete = False
+        chart_bar.y_axis.delete = False
+
         chart_bar.dataLabels = DataLabelList()
         chart_bar.dataLabels.showSerName = False
         chart_bar.dataLabels.showCatName = False
@@ -2996,7 +3015,7 @@ def generate_report():
 
         # 3. Pie Chart of Categories
         chart_pie_cat = PieChart()
-        chart_pie_cat.title = f"{empresa_input.upper()} {sucursal.upper().replace('_', ' ')}"
+        chart_pie_cat.title = etiqueta_empresa_sucursal(empresa_input, sucursal)
         chart_pie_cat.legend = None  # No legend, labels are directly on/outside slices
         
         # O4:O{t4_end_row} data, N4:N{t4_end_row} categories (Col 15 and 14)
@@ -3235,7 +3254,7 @@ def generate_report():
                 c = ws_desc.cell(row=1, column=col)
                 c.fill = fill_header
                 c.border = thin_border
-            title_text = f"DESCUENTOS POR VENTAS GRANDES {empresa_input.upper()} {sucursal.upper().replace('_', ' ')} {fecha}"
+            title_text = f"DESCUENTOS POR VENTAS GRANDES {etiqueta_empresa_sucursal(empresa_input, sucursal)} {fecha}"
             title_cell = ws_desc.cell(row=1, column=1, value=title_text)
             title_cell.font = font_header
             title_cell.alignment = Alignment(horizontal="center", vertical="center")
