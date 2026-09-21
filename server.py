@@ -252,12 +252,19 @@ COLOR_PROMO = "4472C4"              # accent1 azul - porción "Promo" del pie
 COLOR_FUERA_PROMO = "ED7D31"        # accent2 naranja - porción "Fuera de Promo" del pie
 
 # --- DATA URLS ---
-# FIX (sesión 24): el link publicado de "TIPIFICACIONES" cambió — el anterior
-# (2PACX-1vTfq8...gid=1109198771) empezó a devolver HTTP 400, probablemente
-# porque el "Publicar en la web" de esa hoja se detuvo/regeneró en algún momento
-# y Google le asignó una URL pública nueva. Actualizado al link vigente que el
-# cliente confirmó en Google Sheets (Archivo > Compartir > Publicar en la web).
-URL_TIPIFICACIONES = f"https://docs.google.com/spreadsheets/d/e/2PACX-1vR26tv7s2rVM2NfwdaK48YHZTsCW8X2IpkiFFC8zXmBB4ZR9ft5otBoXNg2cK-4oIKnnVDzTYKLgC4_/pub?gid={GID_TIPIFICACIONES}&single=true&output=csv"
+# FIX (sesión 24): el token de "Publicar en la web" de la hoja de Google cambió —
+# el anterior (2PACX-1vTfq8...) empezó a devolver HTTP 400/401 en TODOS los gids
+# (TIPIFICACIONES y las 3 bases de precios), porque el token es del DOCUMENTO
+# completo, no de una pestaña puntual: al detenerse/regenerarse la publicación,
+# cambió para toda la hoja de cálculo, no solo para TIPIFICACIONES. Antes este
+# token estaba repetido como texto suelto en 3 lugares distintos del archivo
+# (acá y en las 2 construcciones de "url_base" del maestro de precios) — la
+# primera vez que se actualizó, solo se corrigió acá, y los otros 2 quedaron
+# apuntando al token viejo (por eso "TIPIFICACIONES" volvió a funcionar pero el
+# maestro de precios de Daka siguió dando error). Ahora es una sola constante
+# (PUBLISH_DOC_TOKEN) que se usa en los 3 lugares, para que esto no se repita.
+PUBLISH_DOC_TOKEN = "2PACX-1vR26tv7s2rVM2NfwdaK48YHZTsCW8X2IpkiFFC8zXmBB4ZR9ft5otBoXNg2cK-4oIKnnVDzTYKLgC4_"
+URL_TIPIFICACIONES = f"https://docs.google.com/spreadsheets/d/e/{PUBLISH_DOC_TOKEN}/pub?gid={GID_TIPIFICACIONES}&single=true&output=csv"
 
 # --- HELPER FUNCTIONS ---
 def round_half_up(n):
@@ -1471,7 +1478,7 @@ def fetch_data(gid_base=None, force_sync=False):
             
         if df_maestro is None:
             try:
-                url_base = f"https://docs.google.com/spreadsheets/d/e/2PACX-1vTfq81DhLQ_8jkbFIAs7OWaO7qkYRis350TTRz_BbbsVucVw4K87Ai0YgiynRIQG1CqRJv9i1V6oEDo/pub?gid={gid_base}&single=true&output=csv"
+                url_base = f"https://docs.google.com/spreadsheets/d/e/{PUBLISH_DOC_TOKEN}/pub?gid={gid_base}&single=true&output=csv"
                 req2 = urllib.request.Request(
                     url_base, 
                     headers={'User-Agent': 'Mozilla/5.0'}
@@ -3559,7 +3566,7 @@ def sync_database():
             # 2. Fetch each master database exactly once
             for gid in [GID_BASE_DAKA, GID_BASE_DAMASCO, GID_BASE_MULTIMAX]:
                 cache_maestro_path = os.path.join(base_dir, f"df_maestro_{gid}_cache.csv")
-                url_base = f"https://docs.google.com/spreadsheets/d/e/2PACX-1vTfq81DhLQ_8jkbFIAs7OWaO7qkYRis350TTRz_BbbsVucVw4K87Ai0YgiynRIQG1CqRJv9i1V6oEDo/pub?gid={gid}&single=true&output=csv"
+                url_base = f"https://docs.google.com/spreadsheets/d/e/{PUBLISH_DOC_TOKEN}/pub?gid={gid}&single=true&output=csv"
                 req2 = urllib.request.Request(
                     url_base, 
                     headers={'User-Agent': 'Mozilla/5.0'}
