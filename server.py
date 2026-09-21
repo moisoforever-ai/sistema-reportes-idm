@@ -3040,7 +3040,22 @@ def generate_report():
         ws2 = wb.create_sheet(title="Datos Detallados")
         ws2.views.sheetView[0].showGridLines = True
         
-        headers_t6 = ['ID Envio', 'Fecha', 'Horario', 'Producto Campo', 'Marca Campo', 'Producto Estandarizado', 'Marca DB', 'Categoría', 'Precio ($)', 'Cantidad', 'Venta Total ($)', 'Factura', 'Visitas', 'Es Promo', 'Marca Propia', 'Venta Proyectada ($)']
+        # FIX (sesión 26, a pedido del cliente): "Venta Total ($)" pasa de ser un
+        # valor fijo a una fórmula viva "=Precio*Cantidad", para que si el cliente
+        # corrige a mano un Precio o una Cantidad directamente en esta hoja, Venta
+        # Total se actualice sola (antes, al ser un número fijo, quedaba
+        # desactualizado si no se recordaba recalcularlo manualmente).
+        #
+        # La tabla dinámica nativa NO puede tener NINGUNA celda con fórmula
+        # dentro de todo su rango fuente (se probó directamente: rechaza el
+        # archivo completo apenas encuentra una, no solo esa columna — ver nota
+        # junto a "Tabla Dinámica" más abajo). Por eso la fórmula viva de "Venta
+        # Total ($)" se movió al FINAL de la hoja (antes estaba justo después de
+        # Cantidad), y en su lugar de siempre queda una columna con el mismo
+        # número pero fijo ("Venta Total (Pivot)", oculta) — así ningún SUMIF ni
+        # fórmula existente que ya apuntaba a esa columna se rompe, y la tabla
+        # dinámica sigue leyendo un rango 100% sin fórmulas.
+        headers_t6 = ['ID Envio', 'Fecha', 'Horario', 'Producto Campo', 'Marca Campo', 'Producto Estandarizado', 'Marca DB', 'Categoría', 'Precio ($)', 'Cantidad', 'Venta Total (Pivot)', 'Factura', 'Visitas', 'Es Promo', 'Marca Propia', 'Venta Proyectada ($)', 'Venta Total ($)']
         for col_idx, h in enumerate(headers_t6, start=1):
             cell = ws2.cell(row=1, column=col_idx, value=h)
             cell.font = font_header
@@ -3067,11 +3082,11 @@ def generate_report():
             ws2.cell(row=raw_row_idx, column=9, value=round_half_up(float(row['PRECIO_MAESTRO']))).number_format = '$#,##0'
             ws2.cell(row=raw_row_idx, column=9).alignment = Alignment(horizontal="center", vertical="center")
             ws2.cell(row=raw_row_idx, column=10, value=int(row['Cantidad'])).alignment = Alignment(horizontal="center", vertical="center")
-            # FIX (sesión 22): antes esto era la fórmula "=ROUND(I*J,0)" —
-            # se cambia a un valor ya calculado, porque la tabla dinámica
-            # nativa no puede leer fórmulas como fuente de datos (las
-            # rechaza directamente). El Consolidado sigue funcionando igual
-            # (el SUMIF suma valores, sea que la celda tenga fórmula o no).
+            # Columna 11 (K, oculta): "Venta Total (Pivot)" — mismo número que la
+            # Venta Total visible pero fijo, no fórmula. Ocupa el lugar donde
+            # antes estaba la Venta Total visible, así los SUMIF de más arriba
+            # (que ya apuntan a la columna K) y la tabla dinámica nativa siguen
+            # funcionando sin cambios. Ver FIX (sesión 26) más arriba.
             venta_total_val = round_half_up(float(row['PRECIO_MAESTRO']) * int(row['Cantidad']))
             ws2.cell(row=raw_row_idx, column=11, value=venta_total_val).number_format = '$#,##0'
             ws2.cell(row=raw_row_idx, column=11).alignment = Alignment(horizontal="center", vertical="center")
@@ -3096,15 +3111,23 @@ def generate_report():
             ws2.cell(row=raw_row_idx, column=15, value="SÍ" if row['ES_MARCA_PROPIA'] else "NO").alignment = Alignment(horizontal="center", vertical="center")
             ws2.cell(row=raw_row_idx, column=16, value=round_half_up(float(row['VENTA_PROYECTADA']))).number_format = '$#,##0'
             ws2.cell(row=raw_row_idx, column=16).alignment = Alignment(horizontal="center", vertical="center")
-            
-            for col_idx in range(1, 17):
+
+            # Columna 17 (Q, visible, al final de la hoja): "Venta Total ($)" —
+            # la fórmula viva que ve y puede auditar el cliente, "=Precio*Cantidad"
+            # (=I{fila}*J{fila}). No puede ir en el rango que lee la tabla
+            # dinámica nativa (ver FIX sesión 26 más arriba), así que se movió
+            # acá, al final.
+            ws2.cell(row=raw_row_idx, column=17, value=f"=I{raw_row_idx}*J{raw_row_idx}").number_format = '$#,##0'
+            ws2.cell(row=raw_row_idx, column=17).alignment = Alignment(horizontal="center", vertical="center")
+
+            for col_idx in range(1, 18):
                 c = ws2.cell(row=raw_row_idx, column=col_idx)
                 c.font = font_data
                 c.border = thin_border
                 if raw_row_idx % 2 == 1:
                     c.fill = fill_zebra
             raw_row_idx += 1
- 
+
         for col in ws2.columns:
             max_len = 0
             col_letter = get_column_letter(col[0].column)
@@ -3114,6 +3137,12 @@ def generate_report():
                     max_len = len(val_str)
             ws2.column_dimensions[col_letter].width = min(max(max_len + 3, 10), 30)
 
+        # La columna K ("Venta Total (Pivot)") es de uso interno para la tabla
+        # dinámica nativa — se oculta para no confundir al cliente con una
+        # columna duplicada de Venta Total (la que sí ve es "Venta Total ($)",
+        # ahora al final de la hoja, columna Q).
+        ws2.column_dimensions['K'].hidden = True
+
         # --- TABLA DINÁMICA NATIVA DE EXCEL (a pedido del cliente, sesión 22) ---
         # A diferencia de las demás tablas de este archivo, ESTA sí es una
         # tabla dinámica real de Excel (no armada con fórmulas) — usa la
@@ -3122,12 +3151,22 @@ def generate_report():
         # Se arman 2 tablas dinámicas nativas (Suma de Cantidad y Suma de
         # Venta Total) — esta versión de la librería solo soporta un campo
         # de valor por tabla dinámica, por eso son dos en vez de una con
-        # ambas columnas juntas. Las dos toman como fuente "Datos
-        # Detallados" completa (que es texto/número plano, no fórmulas —
-        # la librería no puede leer fórmulas) y quedan con actualización
-        # automática activada (refresh_on_load), así que al abrir el
-        # archivo en Excel después de corregir algo en "Datos Detallados",
-        # se recalculan solas sin que el cliente tenga que hacer nada.
+        # ambas columnas juntas. Las dos quedan con actualización automática
+        # activada (refresh_on_load), así que al abrir el archivo en Excel
+        # después de corregir algo en "Datos Detallados", se recalculan
+        # solas sin que el cliente tenga que hacer nada.
+        #
+        # FIX (sesión 26): la fórmula viva de "Venta Total ($)" se movió al
+        # final de la hoja (columna Q) precisamente para que quede AFUERA del
+        # rango que lee esta tabla dinámica — se probó en este mismo entorno
+        # que la librería rechaza el archivo completo si encuentra una sola
+        # celda con fórmula en cualquier parte del rango fuente (no solo en la
+        # columna que se usa como valor), así que el rango tiene que ser
+        # 100% valores fijos de punta a punta. "PivotVentaTotal" toma sus datos
+        # de "Venta Total (Pivot)" (columna K, oculta), que tiene el mismo
+        # número que "Venta Total ($)" pero fijo. La tabla de Cantidad no tenía
+        # este problema porque la columna J (Cantidad) siempre fue un número
+        # fijo, nunca una fórmula.
         #
         # LIMITACIÓN CONOCIDA: no se puede fijar el orden de mayor a menor
         # desde acá — la tabla sale ordenada por orden de aparición en
@@ -3150,7 +3189,7 @@ def generate_report():
                 destination="E3",
                 name="PivotVentaTotal",
                 row="Producto Estandarizado",
-                value="Venta Total ($)",
+                value="Venta Total (Pivot)",
             )
             ws_pivot.cell(row=1, column=1, value="Suma de Cantidad").font = font_bold
             ws_pivot.cell(row=1, column=5, value="Suma de Venta Total").font = font_bold
