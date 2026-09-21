@@ -3082,11 +3082,13 @@ def generate_report():
             ws2.cell(row=raw_row_idx, column=9, value=round_half_up(float(row['PRECIO_MAESTRO']))).number_format = '$#,##0'
             ws2.cell(row=raw_row_idx, column=9).alignment = Alignment(horizontal="center", vertical="center")
             ws2.cell(row=raw_row_idx, column=10, value=int(row['Cantidad'])).alignment = Alignment(horizontal="center", vertical="center")
-            # Columna 11 (K, oculta): "Venta Total (Pivot)" — mismo número que la
-            # Venta Total visible pero fijo, no fórmula. Ocupa el lugar donde
-            # antes estaba la Venta Total visible, así los SUMIF de más arriba
-            # (que ya apuntan a la columna K) y la tabla dinámica nativa siguen
-            # funcionando sin cambios. Ver FIX (sesión 26) más arriba.
+            # Columna 11 (K, oculta): "Venta Total (Pivot)" — arranca con este
+            # mismo número fijo (no fórmula) SOLO para que la tabla dinámica se
+            # pueda construir; más abajo, apenas queda armada, esta misma
+            # columna se reemplaza por la fórmula viva "=I*J" (ver FIX sesión
+            # 26, junto a "Tabla Dinámica"). Ocupa el lugar donde antes estaba
+            # la Venta Total visible, así los SUMIF de más arriba (que ya
+            # apuntan a la columna K) siguen funcionando sin cambios.
             venta_total_val = round_half_up(float(row['PRECIO_MAESTRO']) * int(row['Cantidad']))
             ws2.cell(row=raw_row_idx, column=11, value=venta_total_val).number_format = '$#,##0'
             ws2.cell(row=raw_row_idx, column=11).alignment = Alignment(horizontal="center", vertical="center")
@@ -3162,11 +3164,32 @@ def generate_report():
         # que la librería rechaza el archivo completo si encuentra una sola
         # celda con fórmula en cualquier parte del rango fuente (no solo en la
         # columna que se usa como valor), así que el rango tiene que ser
-        # 100% valores fijos de punta a punta. "PivotVentaTotal" toma sus datos
-        # de "Venta Total (Pivot)" (columna K, oculta), que tiene el mismo
-        # número que "Venta Total ($)" pero fijo. La tabla de Cantidad no tenía
-        # este problema porque la columna J (Cantidad) siempre fue un número
-        # fijo, nunca una fórmula.
+        # 100% valores fijos de punta a punta EN EL MOMENTO EN QUE SE ARMA LA
+        # TABLA. "PivotVentaTotal" toma sus datos de "Venta Total (Pivot)"
+        # (columna K, oculta).
+        #
+        # FIX (sesión 26, a pedido explícito del cliente): el cliente quiere
+        # que si corrige a mano un Precio o una Cantidad en "Datos
+        # Detallados", la Tabla Dinámica (y con ella el Consolidado) lo
+        # reflejen solos al actualizarse, sin tener que regenerar el reporte.
+        # Truco: la tabla dinámica se arma PRIMERO con la columna K todavía en
+        # números fijos (así la librería no falla), y RECIÉN DESPUÉS —ya con
+        # la tabla dinámica creada y guardada en el archivo— se reemplaza el
+        # contenido de K por la fórmula viva "=I*J". La definición de la tabla
+        # dinámica ya quedó guardada apuntando al rango/columna K; lo único
+        # que cambia es que, de ahí en adelante, esa columna se recalcula sola.
+        # Como las 2 tablas dinámicas tienen refresh_on_load activado, Excel
+        # las actualiza automáticamente cada vez que se abre el archivo,
+        # leyendo el valor YA CALCULADO de K en ese momento (formulas
+        # evaluadas), no el número que tenía al generarse.
+        #
+        # OJO — límite real de Excel, no de este sistema: un cambio a mano de
+        # Precio o Cantidad se refleja en la columna Venta Total al instante
+        # (por ser fórmula), pero la Tabla Dinámica y el Consolidado NO se
+        # actualizan solos en cada tecla — ninguna tabla dinámica de Excel lo
+        # hace, nativa o no. Hace falta actualizarla una vez (clic derecho
+        # sobre la tabla → Actualizar, o Datos → Actualizar todo) o cerrar y
+        # volver a abrir el archivo, que es cuando entra refresh_on_load.
         #
         # LIMITACIÓN CONOCIDA: no se puede fijar el orden de mayor a menor
         # desde acá — la tabla sale ordenada por orden de aparición en
@@ -3193,6 +3216,11 @@ def generate_report():
             )
             ws_pivot.cell(row=1, column=1, value="Suma de Cantidad").font = font_bold
             ws_pivot.cell(row=1, column=5, value="Suma de Venta Total").font = font_bold
+
+            # Recién ahora, con la tabla dinámica ya armada y guardada, se
+            # convierte "Venta Total (Pivot)" en fórmula viva (ver FIX arriba).
+            for r in range(2, ultima_fila_dd + 1):
+                ws2.cell(row=r, column=11, value=f"=I{r}*J{r}").number_format = '$#,##0'
         except Exception as e:
             app.logger.warning(f"No se pudo crear la tabla dinámica nativa: {e}")
 
