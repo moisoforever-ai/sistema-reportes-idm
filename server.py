@@ -381,7 +381,15 @@ def estandarizar_texto(texto):
     # Estandarizar BTUs (convertir 12btu -> 12000btu, 12k -> 12000 btu, 12.000 btu -> 12000btu, etc.)
     t = re.sub(r'\s+btu', 'btu', t)
     t = re.sub(r'\b(5|6|8|9|12|18|24|36)btu\b', lambda m: f"{int(m.group(1))*1000}btu", t)
-    t = re.sub(r'\b(\d+)\s*k\s*(?:btu)?\b', lambda m: str(int(m.group(1)) * 1000) + ' btu', t)
+    # FIX (sesión 27, encontrado al probar la tabla de promo contra el catálogo):
+    # "12K" también es como se escribe la capacidad de una lavadora (12 KG,
+    # igual que en tu tabla: "AUTOMATICA 12K $430"). Esta conversión de "K" a
+    # BTU es demasiado amplia — le pasaba por encima a "Lavadora Automatica
+    # 12K" y lo dejaba como "12000 btu", perdiendo el dato de KG por completo
+    # (nunca calzaba con ningún modelo de Lavado). Se excluye cuando el
+    # producto es lavadora/secadora, que nunca hablan de BTU.
+    if 'lavadora' not in t and 'secadora' not in t:
+        t = re.sub(r'\b(\d+)\s*k\s*(?:btu)?\b', lambda m: str(int(m.group(1)) * 1000) + ' btu', t)
          
     # If it is like 'tv 32', add ' pulg '
     if "tv" in t and "pulg" not in t:
@@ -771,7 +779,14 @@ def categorizar_producto(nombre_producto):
     # de aire, y planchas alisadoras "de aire" que no son aires
     # acondicionados. Se agregan esas exclusiones, mismo criterio que ya
     # existía para "freidora"/"fryer".
-    if (any(k in nombre for k in ['aire', 'a/a', 'split', 'pisotecho', 'piso techo'])
+    # FIX (sesión 27, a pedido del cliente): "AC" (abreviatura de A/A) ya se
+    # reconocía en check_promo_status (vía estandarizar_texto, que convierte
+    # "ac" en "a/a"), pero esta función usa su propia normalización, más
+    # simple, que nunca pasaba por esa conversión — un producto como "AC
+    # VENTANA DA+CO 5K BTU 110V" calculaba bien el precio de promo pero caía
+    # en OTROS acá. Se agrega "ac" como disparador aparte (con límite de
+    # palabra, contains_word, para no capturar cosas como "acero" o "vacío").
+    if ((any(k in nombre for k in ['aire', 'a/a', 'split', 'pisotecho', 'piso techo']) or contains_word(nombre, 'ac'))
             and not any(x in nombre for x in ['freidora', 'fryer', 'purificador', 'cortina', 'alisadora', 'protector de voltaje', 'protector de sobrevoltaje'])):
         return 'A/A'
     # 2. TV
@@ -785,7 +800,12 @@ def categorizar_producto(nombre_producto):
     elif any(k in nombre for k in ['lavadora', 'secadora', 'doble tina', 'semiautomatica']):
         return 'LAVADO'
     # 4. CONGELADOR
-    elif any(k in nombre for k in ['congelador', 'freezer']):
+    # FIX (sesión 27, a pedido del cliente): "cava refrigeradora" caía en
+    # NEVERA porque "refrigeradora" contiene literalmente "refrigerador" — una
+    # cava no es una nevera doméstica, el cliente la quiere junto a
+    # Congelador. Se agrega "cava" acá, ANTES del chequeo de NEVERA, para que
+    # nunca llegue a esa rama.
+    elif any(k in nombre for k in ['congelador', 'freezer', 'cava']):
         return 'CONGELADOR'
     # 5. NEVERA
     elif any(k in nombre for k in ['refrigerador', 'refigerador', 'nevera']):
@@ -1238,8 +1258,26 @@ def buscar_coincidencia_tecnica(fila, universo_maestro):
 def check_promo_status(producto_maestro, precio):
     nombre = estandarizar_texto(producto_maestro)
     
+    # FIX (sesión 27, a pedido del cliente): principio general — un producto
+    # de una de estas 6 familias SOLO es promo si calza con un modelo/spec
+    # específico de la tabla de promo (capacidad, BTU, KG, pulgadas, tipo de
+    # tope, etc.). Antes, cuando no se reconocía ningún spec puntual, cada
+    # rama tenía un "comodín" que igual lo marcaba promo si el precio caía
+    # bajo un techo genérico de la categoría — así fue como una "Cava
+    # Refrigeradora" (sin capacidad reconocible) terminó marcada promo bajo
+    # el comodín de Neveras (≤$500), y una "Cocina Eléctrica 2 Hornillas"
+    # (que no es ningún Tope de la tabla) bajo el comodín de Cocina (≤$250).
+    # Se eliminan esos comodines: de ahora en más, si no calza con un spec
+    # puntual, es "No Cesta Básica" (no promo).
+
     # 1. Neveras
-    if any(k in nombre for k in ['refrigerador', 'nevera', 'freezer', 'congelador vertical']):
+    # FIX (sesión 27): se excluye "cava" — "cava refrigeradora" contiene
+    # literalmente "refrigerador", pero una cava no es una nevera doméstica
+    # (el cliente la quiere junto a Congelador, ver categorizar_producto).
+    # Al excluirla acá, cae directo al "No Cesta Básica" del final de la
+    # función (no contiene "congelador"/"freezer" tampoco), que es lo
+    # correcto: la tabla de promo no tiene una fila específica para cavas.
+    if any(k in nombre for k in ['refrigerador', 'nevera', 'freezer', 'congelador vertical']) and 'cava' not in nombre:
         if 'ejec' in nombre or 'ejecutiva' in nombre or 'minibar' in nombre:
             if '2p' in nombre or '2 pies' in nombre:
                 return precio <= 140.0, 'Neveras (EJEC 2P)'
@@ -1249,9 +1287,10 @@ def check_promo_status(producto_maestro, precio):
                 return precio <= 230.0, 'Neveras (EJEC 4P)'
             elif '5p' in nombre or '5 pies' in nombre:
                 return precio <= 250.0, 'Neveras (EJEC 5P)'
-            else:
-                return precio <= 170.0, 'Neveras (EJEC 3P)'
-        
+            # Sin capacidad reconocible (ni 2P/3P/4P/5P) — no calza con
+            # ningún EJEC específico de la tabla.
+            return False, 'No Cesta Básica'
+
         pies = None
         m_p = re.search(r'(\d+)\s*(?:p|pies|p c)', nombre)
         if m_p:
@@ -1261,7 +1300,7 @@ def check_promo_status(producto_maestro, precio):
             if m_l:
                 lits = int(m_l.group(1))
                 pies = round(lits / 28.3)
-        
+
         if pies:
             limits = {
                 7: 400.0, 8: 395.0, 9: 600.0, 10: 610.0,
@@ -1270,8 +1309,10 @@ def check_promo_status(producto_maestro, precio):
             p_cap = max(7, min(13, pies))
             limit = limits.get(p_cap, 800.0)
             return precio <= limit, f'Neveras (TF {p_cap}P)'
-        return precio <= 500.0, 'Neveras'
-        
+        # Sin capacidad reconocible en absoluto — no calza con ningún modelo
+        # específico de Neveras de la tabla.
+        return False, 'No Cesta Básica'
+
     # 2. Lavado
     elif any(k in nombre for k in ['lavadora', 'secadora']):
         is_semi = any(k in nombre for k in ['semi', 'doble tina', 'dos tinas', 'semiautomatica'])
@@ -1298,7 +1339,8 @@ def check_promo_status(producto_maestro, precio):
                 closest_kg = min(limits.keys(), key=lambda k: abs(k - kg))
                 limit = limits[closest_kg]
                 return precio <= limit, f'Lavado (AUTOMATICA {closest_kg}KG)'
-        return precio <= 300.0, 'Lavado'
+        # Sin KG reconocible — no calza con ningún modelo específico de Lavado.
+        return False, 'No Cesta Básica'
         
     # 3. Aires Acondicionados
     elif any(k in nombre for k in ['aire', 'a/a', 'split', 'piso techo']) and 'freidora' not in nombre and 'enfriador' not in nombre:
@@ -1338,8 +1380,10 @@ def check_promo_status(producto_maestro, precio):
                 return precio <= 470.0, 'A/A (SPLIT 18 MIL 220V)'
             elif btu == 24:
                 return precio <= 550.0, 'A/A (SPLIT 24 MIL 220V)'
-            return precio <= 500.0, 'A/A (Split)'
-            
+            # Split con BTU no reconocido (ni 12/18/24) — no calza con ningún
+            # modelo específico de la tabla.
+            return False, 'No Cesta Básica'
+
         # Ventana
         if btu == 5:
             return precio <= 150.0, 'A/A (VENTANA 5 MIL 110V)'
@@ -1353,8 +1397,8 @@ def check_promo_status(producto_maestro, precio):
             return precio <= 400.0, 'A/A (VENTANA 18 MIL 220V)'
         elif btu == 24:
             return precio <= 450.0, 'A/A (VENTANA 24 MIL 220V)'
-        if is_ventana:
-            return precio <= 300.0, 'A/A (Ventana)'
+        # Ventana con BTU no reconocido, o ni split ni ventana explícitos —
+        # no calza con ningún modelo específico de la tabla.
         return False, 'No Cesta Básica'
         
     # 4. Televisores
@@ -1393,10 +1437,16 @@ def check_promo_status(producto_maestro, precio):
             }
             closest_size = min(limits.keys(), key=lambda s: abs(s - size))
             return precio <= limits[closest_size], f'TV {closest_size}" SMART'
-        return precio <= 400.0, 'TV Smart'
+        # Sin pulgadas reconocibles — no calza con ningún modelo específico de TV.
+        return False, 'No Cesta Básica'
         
     # 5. Cocina
-    elif any(k in nombre for k in ['cocina', 'tope a gas', 'tope electrico', 'campana']):
+    # FIX (sesión 27, encontrado al probar la tabla de promo contra el
+    # catálogo): "Tope Dual 4H" no entraba nunca a esta rama — la lista de
+    # disparadores tenía "tope a gas" y "tope electrico" pero no "tope dual",
+    # así que ese modelo específico de tu tabla ($220) nunca se reconocía
+    # como promo bajo ningún precio. Se agrega "tope dual".
+    elif any(k in nombre for k in ['cocina', 'tope a gas', 'tope electrico', 'tope dual', 'campana']):
         is_campana = 'campana' in nombre
         is_gas = 'gas' in nombre
         is_elec = 'electrico' in nombre or 'electrica' in nombre
@@ -1421,8 +1471,22 @@ def check_promo_status(producto_maestro, precio):
                 return precio <= 210.0, 'Cocina (TOPE ELECTRICO 4H)'
             elif is_dual:
                 return precio <= 220.0, 'Cocina (TOPE DUAL 4H)'
-        return precio <= 250.0, 'Cocina (COCINA A GAS 4H)'
-        
+            # Es "tope" pero no se reconoce si es a gas/eléctrico/dual — no
+            # calza con ningún Tope específico de la tabla.
+            return False, 'No Cesta Básica'
+
+        # FIX (sesión 27, a pedido del cliente): antes CUALQUIER producto con
+        # "cocina" en el nombre que no fuera tope ni campana caía acá, con el
+        # precio de "Cocina a Gas 4H" (≤$250) — así una "Cocina Eléctrica 2
+        # Hornillas" a $19 (que NO es un Tope y la tabla no tiene una fila de
+        # "cocina eléctrica" independiente) se marcaba promo por error. Ahora
+        # esta fila solo aplica a cocinas A GAS de pie/completas (que sí están
+        # en la tabla, aparte de los Topes); cualquier otra variante (p. ej.
+        # eléctrica, sin tope) no calza con ningún modelo específico.
+        if is_gas:
+            return precio <= 250.0, 'Cocina (COCINA A GAS 4H)'
+        return False, 'No Cesta Básica'
+
     # 6. Congelador
     elif 'congelador' in nombre or 'freezer' in nombre:
         lits = None
@@ -1433,7 +1497,10 @@ def check_promo_status(producto_maestro, precio):
             limits = {100: 220.0, 142: 270.0, 200: 340.0}
             closest_l = min(limits.keys(), key=lambda l: abs(l - lits))
             return precio <= limits[closest_l], f'Congelador (HORIZONTAL {closest_l}LT)'
-        return precio <= 250.0, 'Congelador'
+        # Sin litros reconocibles — no calza con ningún modelo específico de
+        # Congelador (esto también cubre las cavas: no tienen litros
+        # reconocibles como "HORIZONTAL 100/142/200LT", así que no son promo).
+        return False, 'No Cesta Básica'
         
     return False, 'No Cesta Básica'
 
