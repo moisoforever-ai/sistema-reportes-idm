@@ -823,8 +823,21 @@ def categorizar_producto(nombre_producto):
     # nuevo. Se sacó "vaso" de los disparadores (ahora va a OTROS).
     elif 'lavaplatos' in nombre:
         return 'OTROS'
-    elif (any(k in nombre for k in ['tope a gas', 'tope electrico', 'tope dual', 'cocina a gas', 'campana', 'estufa', 'cocina', 'sarten', 'cubierto', 'vajilla', 'utensilio', 'cuchillo', 'cuchillos'])
-          or (contains_word(nombre, 'olla') and 'arrocera' not in nombre)):
+    # FIX (sesión 28, a pedido del cliente):
+    # - "Tope Damasco A Gas 75CM 5 Hornillas" no calzaba con el substring
+    #   literal "tope a gas" porque la marca ("Damasco") queda insertada en
+    #   medio ("tope DAMASCO a gas"). Se cambia a un chequeo tolerante a
+    #   marca: la palabra "tope" en cualquier parte + "gas"/"electric"/"dual"
+    #   en cualquier parte del nombre.
+    # - "Juego de Ollas 7 Piezas Damasco" no calzaba porque contains_word
+    #   comparaba contra "olla" exacto y el texto trae el plural "ollas". Se
+    #   agrega el plural como alternativa.
+    # - Se excluye "presion" del disparador de "olla" para que una "Olla de
+    #   Presión (Eléctrica)" no quede atrapada acá antes de llegar a su rama
+    #   correcta en ELECTRODOMESTICOS (ver fix #10 más abajo).
+    elif (any(k in nombre for k in ['cocina a gas', 'campana', 'estufa', 'cocina', 'sarten', 'cubierto', 'vajilla', 'utensilio', 'cuchillo', 'cuchillos'])
+          or (contains_word(nombre, 'tope') and any(x in nombre for x in ['gas', 'electric', 'dual']))
+          or ((contains_word(nombre, 'olla') or contains_word(nombre, 'ollas')) and 'arrocera' not in nombre and 'presion' not in nombre)):
         return 'COCINA'
     # 7. COMPUTACION
     # FIX (a pedido del cliente, sesión 15): se agregó "internet" (ej. "kit
@@ -843,17 +856,32 @@ def categorizar_producto(nombre_producto):
     # FIX (a pedido del cliente, sesión 15): se sacó "secador" (secador de
     # cabello ahora va a OTROS — no afecta a "secadora" de ropa, que ya se
     # resuelve antes, en el check #3 LAVADO) y "ventilador" (ahora OTROS).
-    # "plancha" ahora excluye explícitamente "alisadora"/"cabello" — la
-    # plancha de ropa se queda acá, la de cabello va a OTROS.
+    # FIX (sesión 28, a pedido del cliente — REVIERTE la sesión 15): antes
+    # "plancha" excluía "alisadora"/"cabello" para que la plancha de ROPA se
+    # quedara en ELECTRODOMESTICOS (solo la de cabello iba a OTROS). El
+    # cliente pidió ahora que TODA plancha (de ropa/vapor o de cabello) vaya
+    # a OTROS, así que se saca "plancha" por completo de esta función —
+    # ninguna rama la reconoce ya, cae directo al else de OTROS.
+    # FIX (sesión 28, a pedido del cliente):
+    # - Se agrega "arepa" (cubre tanto "Tostiarepas de 6 Arepas
+    #   Antiadherente", el texto que escribe el freelance, como "Tosty Arepa
+    #   Damasco", el nombre con el que ese producto existe en el catálogo
+    #   maestro — CATEGORIA se calcula sobre PRODUCTO_CORRECTO, es decir
+    #   sobre el nombre YA emparejado del catálogo, así que el disparador
+    #   tiene que reconocer esa ortografía también, no solo la del freelance).
+    #   Antes caía en OTROS porque ningún disparador la reconocía.
+    # - Se saca "dispensador" de esta lista: un "Dispensador de Agua" no es
+    #   electrodoméstico para el cliente, ahora cae en OTROS (no matchea
+    #   ningún otro disparador de esta función).
     elif (any(k in nombre for k in [
-        'licuadora', 'freidora', 'airfryer', 'air fryer', 'tostador', 'tostadora', 'cafetera', 'sanduchera',
+        'licuadora', 'freidora', 'airfryer', 'air fryer', 'tostador', 'tostadora', 'arepa', 'cafetera', 'sanduchera',
         'sandwichera', 'waflera', 'batidora', 'procesador', 'arrocera', 'nutribullet', 'hervidor', 'tetera',
         'extractor', 'exprimidor', 'multiolla', 'instant pot', 'parrilla', 'parrillera', 'panini', 'afilador', 'balanza',
         'aspiradora', 'rizador', 'rasuradora', 'recortadora', 'cepillo de dientes',
         'humificador', 'humidificador', 'picatodo', 'crepera', 'deshidratador', 'cotufera',
         'espumador', 'yogurtera', 'hidrojet', 'hydrojet', 'microonda', 'olla de presion', 'olla presion',
-        'dispensador', 'horno tostador', 'horno electrico', 'horno freidora', 'horno freidor', 'tosta horno'
-    ]) or ('plancha' in nombre and 'alisadora' not in nombre and 'cabello' not in nombre)):
+        'horno tostador', 'horno electrico', 'horno freidora', 'horno freidor', 'tosta horno'
+    ])):
         return 'ELECTRODOMESTICOS'
     else:
         return 'OTROS'
@@ -1089,6 +1117,16 @@ def obtener_etiqueta_busqueda(producto_original, marca, categoria, grupos_kw, te
     return ' '.join(partes)
 
 
+# FIX (sesión 28, a pedido del cliente): puntaje mínimo de rapidfuzz
+# (token_set_ratio + ajustes de la función) para aceptar un match como
+# válido — por debajo de esto, el producto queda "POR CLASIFICAR" en vez de
+# forzar el candidato más parecido. Calibrado contra matches reales
+# conocidos del cliente (ej. "Freidora de Aire 5L" vs "Freidora/Aire
+# Damasco 5L" ≈ 67, "Tostiarepas..." vs "Tosty Arepa Damasco" ≈ 56) para no
+# rechazar matches correctos — ver la nota en buscar_coincidencia_tecnica
+# sobre qué tipo de match incorrecto SÍ y NO detecta este umbral.
+UMBRAL_CONFIANZA_MATCH = 40
+
 def buscar_coincidencia_tecnica(fila, universo_maestro):
     producto_campo = fila['Producto']
     marca_campo = remover_tildes(str(fila['Marca'])).lower().strip() if not pd.isna(fila['Marca']) else ""
@@ -1251,7 +1289,24 @@ def buscar_coincidencia_tecnica(fila, universo_maestro):
         if res_score_global > res_score:
             res_opcion, res_score = res_opcion_global, res_score_global
 
-    if res_score > 0 and res_opcion != "POR CLASIFICAR":
+    # FIX (sesión 28, a pedido del cliente): antes cualquier puntaje > 0 se
+    # aceptaba como match, sin importar qué tan bajo fuera — así un producto
+    # que no existe en el catálogo (ej. "Colchón" cuando solo hay "Protector
+    # de Colchón") terminaba forzado al candidato más parecido disponible,
+    # aunque fuera un producto totalmente distinto, en vez de quedar
+    # marcado para revisión manual. Se sube el mínimo a un puntaje
+    # razonable de "parecido real" (UMBRAL_CONFIANZA_MATCH).
+    #
+    # OJO — límite conocido de este resguardo, ya probado contra los casos
+    # reales reportados por el cliente: no detecta el caso en que el texto
+    # del freelance es literalmente un subconjunto de palabras del nombre
+    # del candidato (ej. "Sandwichera" vs "Parrilla Sandwichera Damasco") —
+    # ahí el puntaje de similitud da 100/100 porque todas las palabras de la
+    # consulta SÍ están contenidas en el candidato, aunque sea otro producto.
+    # Ese caso no se arregla con un umbral de puntaje: se arregla agregando
+    # "Sandwichera" (y "Colchón") como productos propios en el catálogo
+    # maestro, que es lo que el cliente confirmó que falta.
+    if res_score >= UMBRAL_CONFIANZA_MATCH and res_opcion != "POR CLASIFICAR":
         return res_opcion
     return "POR CLASIFICAR"
 
