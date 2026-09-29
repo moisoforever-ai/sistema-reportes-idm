@@ -835,8 +835,14 @@ def categorizar_producto(nombre_producto):
     # - Se excluye "presion" del disparador de "olla" para que una "Olla de
     #   Presión (Eléctrica)" no quede atrapada acá antes de llegar a su rama
     #   correcta en ELECTRODOMESTICOS (ver fix #10 más abajo).
+    # FIX (28/09/2026, a pedido del cliente): antes un "tope" solo entraba acá
+    # si ADEMÁS decía "gas"/"electric"/"dual" en el nombre — cualquier otro
+    # tope (ej. simplemente "Tope Damasco 75cm") se quedaba afuera y caía en
+    # OTROS. El cliente pidió que CUALQUIER producto con "tope" en el nombre
+    # vaya a COCINA, sin esa condición extra. Se quita el requisito de
+    # gas/electric/dual.
     elif (any(k in nombre for k in ['cocina a gas', 'campana', 'estufa', 'cocina', 'sarten', 'cubierto', 'vajilla', 'utensilio', 'cuchillo', 'cuchillos'])
-          or (contains_word(nombre, 'tope') and any(x in nombre for x in ['gas', 'electric', 'dual']))
+          or contains_word(nombre, 'tope') or contains_word(nombre, 'topes')
           or ((contains_word(nombre, 'olla') or contains_word(nombre, 'ollas')) and 'arrocera' not in nombre and 'presion' not in nombre)):
         return 'COCINA'
     # 7. COMPUTACION
@@ -873,6 +879,10 @@ def categorizar_producto(nombre_producto):
     # - Se saca "dispensador" de esta lista: un "Dispensador de Agua" no es
     #   electrodoméstico para el cliente, ahora cae en OTROS (no matchea
     #   ningún otro disparador de esta función).
+    # FIX (28/09/2026, a pedido del cliente — REVIERTE sesión 15 y sesión 28
+    # de arriba): el cliente pidió ahora lo contrario de esas dos decisiones
+    # anteriores. Se vuelven a agregar "ventilador", "plancha" (ropa/vapor Y
+    # cabello, sin excepción) y "dispensador" a esta lista.
     elif (any(k in nombre for k in [
         'licuadora', 'freidora', 'airfryer', 'air fryer', 'tostador', 'tostadora', 'arepa', 'cafetera', 'sanduchera',
         'sandwichera', 'waflera', 'batidora', 'procesador', 'arrocera', 'nutribullet', 'hervidor', 'tetera',
@@ -880,7 +890,8 @@ def categorizar_producto(nombre_producto):
         'aspiradora', 'rizador', 'rasuradora', 'recortadora', 'cepillo de dientes',
         'humificador', 'humidificador', 'picatodo', 'crepera', 'deshidratador', 'cotufera',
         'espumador', 'yogurtera', 'hidrojet', 'hydrojet', 'microonda', 'olla de presion', 'olla presion',
-        'horno tostador', 'horno electrico', 'horno freidora', 'horno freidor', 'tosta horno'
+        'horno tostador', 'horno electrico', 'horno freidora', 'horno freidor', 'tosta horno',
+        'ventilador', 'plancha', 'dispensador'
     ])):
         return 'ELECTRODOMESTICOS'
     else:
@@ -1687,6 +1698,29 @@ def filtrar_datos_reporte(fecha, empresa_input, sucursal, hora_apertura_str, hor
     mapeo_precios = dict(zip(df_maestro['PRODUCTO'].astype(str), prices_numeric))
     mapeo_marcas = dict(zip(df_maestro['PRODUCTO'].astype(str), df_maestro['MARCA']))
 
+    # FIX (sesión 28, hallado por el cliente — "un TV de 40 con el precio de
+    # otro modelo"): si la lista maestra tiene DOS filas con el mismo texto
+    # exacto en PRODUCTO pero distinto precio (típicamente una fila vieja que
+    # quedó sin borrar al actualizar el precio en una fila nueva), el
+    # diccionario de arriba (dict(zip(...))) se queda CALLADO con uno solo de
+    # los dos precios — el de la fila que aparece más abajo en la hoja, sin
+    # ningún aviso — y ese puede no ser el correcto. Esto no se puede
+    # corregir solo desde acá (no hay forma de saber cuál de las dos filas es
+    # la vigente), así que se deja un log claro para poder confirmarlo y
+    # pedirle al cliente que borre la fila vieja en la lista maestra.
+    _dup_mask = df_maestro['PRODUCTO'].astype(str).duplicated(keep=False)
+    if _dup_mask.any():
+        _dup_precios = df_maestro.loc[_dup_mask].groupby(df_maestro['PRODUCTO'].astype(str))['PRECIO DE REFERENCIA'].apply(
+            lambda s: sorted(set(s.astype(str)))
+        )
+        _dup_reales = {k: v for k, v in _dup_precios.items() if len(v) > 1}
+        if _dup_reales:
+            app.logger.warning(
+                "Lista maestra de %s tiene productos duplicados con precios distintos "
+                "(el reporte usa el último precio de la hoja, puede no ser el correcto): %s",
+                empresa, _dup_reales
+            )
+
     # --- FIX RENDIMIENTO ---
     # Filtramos antes de correr el matching difuso (que es lo costoso) en vez de
     # después. Ver informe de auditoría, sección 4.1.
@@ -1770,6 +1804,29 @@ def filtrar_datos_reporte(fecha, empresa_input, sucursal, hora_apertura_str, hor
     }
 
 
+# FIX (sesión 28, a pedido del cliente): marcador de "hora sin ventas".
+# Ya existía la convención de que el freelance escribiera "Sin productos" en
+# el campo Producto para una hora sin ventas (solo para poder registrar
+# Visitas ese horario). Se generaliza acá para reconocer TAMBIÉN el texto
+# de la nueva casilla que se agrega en Kobo ("No se observaron ventas") —
+# ambos textos, y alguna variante razonable, se tratan como el mismo
+# marcador. PRODUCTO_SIN_VENTAS es el texto único y consistente con el que
+# ese marcador se muestra en todo el reporte (Datos Detallados, etc.),
+# reemplazando el "SIN PRODUCTOS" que se usaba antes.
+MARCADORES_SIN_VENTAS = {
+    'sin productos', 'sin producto',
+    'no se observaron ventas', 'no se observo ventas', 'no se observaron venta',
+    'no hubo ventas', 'no hubo venta',
+}
+PRODUCTO_SIN_VENTAS = 'NO SE OBSERVARON VENTAS'
+
+def es_marcador_sin_ventas(texto):
+    if pd.isna(texto):
+        return False
+    limpio = re.sub(r'\s+', ' ', remover_tildes(str(texto)).lower().strip())
+    return limpio in MARCADORES_SIN_VENTAS
+
+
 def matchear_productos(df_filtered, df_maestro, prices_numeric, mapeo_precios, mapeo_marcas):
     """
     Construye el universo maestro estandarizado a partir de df_maestro y corre el
@@ -1822,18 +1879,20 @@ def matchear_productos(df_filtered, df_maestro, prices_numeric, mapeo_precios, m
     # Matching corre solo sobre df_filtered (el subconjunto del reporte), no sobre todo df_campo
     df_filtered = df_filtered.copy()
 
-    # FIX (cosmético, hallado durante las pruebas de la sesión 2): las filas "Sin
-    # productos" (una hora sin ventas, existen solo para registrar Visitas) no
-    # deberían pasar por el matching difuso — a veces "empataban" por casualidad con
-    # un producto real sin sentido (ej. "SILLA COMEDOR") en la columna de detalle del
-    # Excel. No afectaba ningún total (Cantidad ya es 0 para estas filas gracias al
-    # fillna de filtrar_datos_reporte), pero se veía mal. Se detectan aparte y se les
-    # asigna un valor fijo sin pasar por el matcher.
-    es_sin_productos = df_filtered['Producto'].astype(str).str.strip().str.lower() == 'sin productos'
+    # FIX (cosmético, hallado durante las pruebas de la sesión 2; ampliado en
+    # sesión 28): las filas marcador de "hora sin ventas" (ver
+    # es_marcador_sin_ventas / MARCADORES_SIN_VENTAS más arriba, presentes
+    # solo para registrar Visitas) no deberían pasar por el matching difuso
+    # — a veces "empataban" por casualidad con un producto real sin sentido
+    # (ej. "SILLA COMEDOR") en la columna de detalle del Excel. No afectaba
+    # ningún total (Cantidad ya es 0 para estas filas gracias al fillna de
+    # filtrar_datos_reporte), pero se veía mal. Se detectan aparte y se les
+    # asigna un valor fijo (PRODUCTO_SIN_VENTAS) sin pasar por el matcher.
+    es_sin_productos = df_filtered['Producto'].apply(es_marcador_sin_ventas)
 
     def _match_row(row):
         if es_sin_productos.loc[row.name]:
-            return 'SIN PRODUCTOS'
+            return PRODUCTO_SIN_VENTAS
         return buscar_coincidencia_tecnica(row, universo_maestro)
 
     df_filtered['PRODUCTO_CORRECTO'] = df_filtered.apply(_match_row, axis=1)
@@ -2494,8 +2553,12 @@ def generate_report():
             if pd.isna(visits):
                 visits = 0
             
-            # Filter valid product sales (exclude "sin productos")
-            valid_sales = group[group['Producto'].astype(str).str.lower().str.strip() != 'sin productos']
+            # Filter valid product sales (exclude el marcador de "hora sin
+            # ventas" — FIX sesión 28: se compara contra PRODUCTO_CORRECTO ya
+            # canonicalizado, no contra el texto crudo del freelance, para
+            # que reconozca cualquiera de los textos de MARCADORES_SIN_VENTAS
+            # por igual, no solo "sin productos" literal).
+            valid_sales = group[group['PRODUCTO_CORRECTO'] != PRODUCTO_SIN_VENTAS]
             
             start_slot_row = current_row
             
@@ -3676,7 +3739,10 @@ def generate_observations():
             categorias_str = "ninguna"
             
         # Top 3 Products by units sold
-        df_t2 = df_filtered.groupby(['PRODUCTO_CORRECTO', 'PRECIO_MAESTRO'])['Cantidad'].sum().reset_index()
+        # FIX (sesión 28): se excluye el marcador de "hora sin ventas" — con
+        # muy pocos productos reales en el estudio, un "NO SE OBSERVARON
+        # VENTAS" (0 unidades) podía colarse en el top 3 del texto.
+        df_t2 = df_filtered[df_filtered['PRODUCTO_CORRECTO'] != PRODUCTO_SIN_VENTAS].groupby(['PRODUCTO_CORRECTO', 'PRECIO_MAESTRO'])['Cantidad'].sum().reset_index()
         df_t2.columns = ['Producto', 'Precio', 'Cantidad']
         df_top_products = df_t2.sort_values(by='Cantidad', ascending=False).head(3)
         
