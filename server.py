@@ -903,10 +903,14 @@ def is_own_brand(marca_db, empresa):
     
     if 'daka' in emp:
         own_brands = ['HYUNDAI', 'DAEWOO', 'SANSUI', 'RIBELLE', 'BM', 'BREMEN']
+    # ACTUALIZACIÓN (07/10/2026, tabla "MARCAS PROPIAS" de la quincena): se
+    # agregan VENELECTR y SYON a Damasco, e ITOK a Multimax. La marca
+    # "DA+CO | MIDEA" de la tabla ya queda cubierta por "DA+CO" (la
+    # comparación es por texto contenido), pero "MIDEA" sola NO es marca propia.
     elif 'damasco' in emp:
-        own_brands = ['DA+CO', 'DACO', 'DAMASCO']
+        own_brands = ['DA+CO', 'DACO', 'DAMASCO', 'VENELECTR', 'SYON']
     elif 'multimax' in emp:
-        own_brands = ['CLX', 'CONDESA', 'FRIGILUX', 'MILATTI', 'KUCCE', 'VETRUX', 'MUNDO BLANCO']
+        own_brands = ['CLX', 'CONDESA', 'FRIGILUX', 'MILATTI', 'KUCCE', 'VETRUX', 'ITOK', 'MUNDO BLANCO']
     else:
         own_brands = []
         
@@ -1323,7 +1327,15 @@ def buscar_coincidencia_tecnica(fila, universo_maestro):
 
 def check_promo_status(producto_maestro, precio):
     nombre = estandarizar_texto(producto_maestro)
-    
+
+    # ACTUALIZACIÓN (07/10/2026, a pedido del cliente): todos los precios tope
+    # de esta función se recargaron con la tabla "PROMO - PRIMERA QUINCENA DE
+    # OCTUBRE". Cada número de abajo es el precio MÁXIMO para que el producto
+    # cuente como promo (precio <= tope). Cuando salga la tabla de la próxima
+    # quincena, hay que actualizar estos mismos topes (Neveras, Lavado, Aires,
+    # TV, Cocina y Congelador). Cambios de estructura frente a la tabla
+    # anterior: Neveras EJEC ahora tiene 1.5P/2P/3P/4P (ya no existe EJEC 5P).
+
     # FIX (sesión 27, a pedido del cliente): principio general — un producto
     # de una de estas 6 familias SOLO es promo si calza con un modelo/spec
     # específico de la tabla de promo (capacidad, BTU, KG, pulgadas, tipo de
@@ -1345,16 +1357,18 @@ def check_promo_status(producto_maestro, precio):
     # correcto: la tabla de promo no tiene una fila específica para cavas.
     if any(k in nombre for k in ['refrigerador', 'nevera', 'freezer', 'congelador vertical']) and 'cava' not in nombre:
         if 'ejec' in nombre or 'ejecutiva' in nombre or 'minibar' in nombre:
-            if '2p' in nombre or '2 pies' in nombre:
-                return precio <= 140.0, 'Neveras (EJEC 2P)'
-            elif '3p' in nombre or '3 pies' in nombre:
-                return precio <= 170.0, 'Neveras (EJEC 3P)'
-            elif '4p' in nombre or '4 pies' in nombre:
-                return precio <= 230.0, 'Neveras (EJEC 4P)'
-            elif '5p' in nombre or '5 pies' in nombre:
-                return precio <= 250.0, 'Neveras (EJEC 5P)'
-            # Sin capacidad reconocible (ni 2P/3P/4P/5P) — no calza con
-            # ningún EJEC específico de la tabla.
+            # FIX (07/10/2026): la tabla nueva trae EJEC 1.5P. El chequeo
+            # anterior buscaba "5p" como texto suelto, y "1.5p" lo contiene
+            # ("1.", "5p") — una ejecutiva de 1.5P se habría leído como de 5P.
+            # Ahora se lee el número completo (con decimal) antes de la "p"
+            # / "pies", y se compara contra los modelos EJEC de la tabla.
+            m_ej = re.search(r'(\d+(?:\.\d+)?)\s*(?:pies|pie|p)\b', nombre)
+            ej_pies = float(m_ej.group(1)) if m_ej else None
+            limits_ejec = {1.5: 140.0, 2.0: 170.0, 3.0: 210.0, 4.0: 240.0}
+            if ej_pies in limits_ejec:
+                return precio <= limits_ejec[ej_pies], f'Neveras (EJEC {ej_pies:g}P)'
+            # Sin capacidad reconocible (ni 1.5P/2P/3P/4P) — no calza con
+            # ningún EJEC específico de la tabla (EJEC 5P ya no está en ella).
             return False, 'No Cesta Básica'
 
         pies = None
@@ -1369,11 +1383,11 @@ def check_promo_status(producto_maestro, precio):
 
         if pies:
             limits = {
-                7: 400.0, 8: 395.0, 9: 600.0, 10: 610.0,
-                11: 625.0, 12: 750.0, 13: 800.0
+                7: 400.0, 8: 500.0, 9: 600.0, 10: 650.0,
+                11: 700.0, 12: 800.0, 13: 850.0
             }
             p_cap = max(7, min(13, pies))
-            limit = limits.get(p_cap, 800.0)
+            limit = limits.get(p_cap, 850.0)
             return precio <= limit, f'Neveras (TF {p_cap}P)'
         # Sin capacidad reconocible en absoluto — no calza con ningún modelo
         # específico de Neveras de la tabla.
@@ -1390,17 +1404,17 @@ def check_promo_status(producto_maestro, precio):
         if kg:
             if is_semi:
                 limits = {
-                    5: 150.0, 6: 180.0, 7: 200.0, 8: 220.0,
-                    9: 230.0, 10: 250.0, 11: 275.0, 12: 400.0,
-                    13: 380.0, 15: 380.0
+                    5: 130.0, 6: 175.0, 7: 220.0, 8: 230.0,
+                    9: 240.0, 10: 300.0, 11: 360.0, 12: 380.0,
+                    13: 380.0, 15: 430.0
                 }
                 closest_kg = min(limits.keys(), key=lambda k: abs(k - kg))
                 limit = limits[closest_kg]
                 return precio <= limit, f'Lavado (SEMI-AUTO {closest_kg}KG)'
             else:
                 limits = {
-                    7: 280.0, 8: 330.0, 9: 330.0, 10: 340.0,
-                    11: 350.0, 12: 430.0
+                    7: 290.0, 8: 300.0, 9: 320.0, 10: 350.0,
+                    11: 375.0, 12: 430.0
                 }
                 closest_kg = min(limits.keys(), key=lambda k: abs(k - kg))
                 limit = limits[closest_kg]
@@ -1432,37 +1446,37 @@ def check_promo_status(producto_maestro, precio):
         
         if is_pisotecho:
             if btu and btu >= 48:
-                return precio <= 1750.0, 'A/A (PISO TECHO 5 TON)'
-            return precio <= 1200.0, 'A/A (PISO TECHO 3 TON)'
-            
+                return precio <= 1800.0, 'A/A (PISO TECHO 5 TON)'
+            return precio <= 1660.0, 'A/A (PISO TECHO 3 TON)'
+
         if is_split:
             if btu == 12:
                 if is_inverter:
-                    return precio <= 360.0, 'A/A (SPLIT 12 MIL INV 220V)'
+                    return precio <= 315.0, 'A/A (SPLIT 12 MIL INV 220V)'
                 if is_110v:
-                    return precio <= 330.0, 'A/A (SPLIT 12 MIL 110V)'
-                return precio <= 310.0, 'A/A (SPLIT 12 MIL 220V)'
+                    return precio <= 340.0, 'A/A (SPLIT 12 MIL 110V)'
+                return precio <= 300.0, 'A/A (SPLIT 12 MIL 220V)'
             elif btu == 18:
-                return precio <= 470.0, 'A/A (SPLIT 18 MIL 220V)'
+                return precio <= 460.0, 'A/A (SPLIT 18 MIL 220V)'
             elif btu == 24:
-                return precio <= 550.0, 'A/A (SPLIT 24 MIL 220V)'
+                return precio <= 520.0, 'A/A (SPLIT 24 MIL 220V)'
             # Split con BTU no reconocido (ni 12/18/24) — no calza con ningún
             # modelo específico de la tabla.
             return False, 'No Cesta Básica'
 
         # Ventana
         if btu == 5:
-            return precio <= 150.0, 'A/A (VENTANA 5 MIL 110V)'
+            return precio <= 140.0, 'A/A (VENTANA 5 MIL 110V)'
         elif btu == 8:
-            return precio <= 200.0, 'A/A (VENTANA 8 MIL 110V)'
+            return precio <= 190.0, 'A/A (VENTANA 8 MIL 110V)'
         elif btu == 12:
             if is_110v:
-                return precio <= 270.0, 'A/A (VENTANA 12 MIL 110V)'
-            return precio <= 275.0, 'A/A (VENTANA 12 MIL 220V)'
+                return precio <= 240.0, 'A/A (VENTANA 12 MIL 110V)'
+            return precio <= 250.0, 'A/A (VENTANA 12 MIL 220V)'
         elif btu == 18:
-            return precio <= 400.0, 'A/A (VENTANA 18 MIL 220V)'
+            return precio <= 490.0, 'A/A (VENTANA 18 MIL 220V)'
         elif btu == 24:
-            return precio <= 450.0, 'A/A (VENTANA 24 MIL 220V)'
+            return precio <= 520.0, 'A/A (VENTANA 24 MIL 220V)'
         # Ventana con BTU no reconocido, o ni split ni ventana explícitos —
         # no calza con ningún modelo específico de la tabla.
         return False, 'No Cesta Básica'
@@ -1477,29 +1491,33 @@ def check_promo_status(producto_maestro, precio):
         is_smart = any(k in nombre for k in ['smart', 'google tv', 'android tv', 'tizen', 'qled'])
         
         if size:
+            # OJO (07/10/2026): en la tabla de la quincena el TV de 70" figura
+            # a $850 y el de 75" a $760 (el de 75" más barato que el de 70").
+            # Se cargó tal cual viene en la tabla; hay que confirmar con quien
+            # la envió si no son valores invertidos o un error de tipeo.
             if size == 32:
                 if is_smart:
                     return precio <= 160.0, 'TV 32" SMART'
-                return precio <= 100.0, 'TV 32" LED SLIM'
+                return precio <= 130.0, 'TV 32" LED SLIM'
             elif size == 40:
-                return precio <= 230.0, 'TV 40" SMART'
+                return precio <= 220.0, 'TV 40" SMART'
             elif size == 43:
                 return precio <= 260.0, 'TV 43" SMART'
             elif size == 50:
-                return precio <= 395.0, 'TV 50" SMART'
+                return precio <= 350.0, 'TV 50" SMART'
             elif size == 55:
-                return precio <= 420.0, 'TV 55" SMART'
+                return precio <= 485.0, 'TV 55" SMART'
             elif size == 58:
-                return precio <= 460.0, 'TV 58" SMART'
+                return precio <= 600.0, 'TV 58" SMART'
             elif size == 65:
-                return precio <= 655.0, 'TV 65" SMART'
+                return precio <= 690.0, 'TV 65" SMART'
             elif size == 70:
-                return precio <= 730.0, 'TV 70" SMART'
+                return precio <= 850.0, 'TV 70" SMART'
             elif size == 75:
-                return precio <= 830.0, 'TV 75" SMART'
+                return precio <= 760.0, 'TV 75" SMART'
             limits = {
-                32: 160.0, 40: 230.0, 43: 260.0, 50: 395.0,
-                55: 420.0, 58: 460.0, 65: 655.0, 70: 730.0, 75: 830.0
+                32: 160.0, 40: 220.0, 43: 260.0, 50: 350.0,
+                55: 485.0, 58: 600.0, 65: 690.0, 70: 850.0, 75: 760.0
             }
             closest_size = min(limits.keys(), key=lambda s: abs(s - size))
             return precio <= limits[closest_size], f'TV {closest_size}" SMART'
@@ -1529,11 +1547,11 @@ def check_promo_status(producto_maestro, precio):
         if is_tope:
             if is_gas:
                 if h == 5:
-                    return precio <= 180.0, 'Cocina (TOPE A GAS 5H)'
-                return precio <= 150.0, 'Cocina (TOPE A GAS 4H)'
+                    return precio <= 200.0, 'Cocina (TOPE A GAS 5H)'
+                return precio <= 160.0, 'Cocina (TOPE A GAS 4H)'
             elif is_elec:
                 if h == 5:
-                    return precio <= 390.0, 'Cocina (TOPE ELECTRICO 5H)'
+                    return precio <= 250.0, 'Cocina (TOPE ELECTRICO 5H)'
                 return precio <= 210.0, 'Cocina (TOPE ELECTRICO 4H)'
             elif is_dual:
                 return precio <= 220.0, 'Cocina (TOPE DUAL 4H)'
@@ -1560,7 +1578,7 @@ def check_promo_status(producto_maestro, precio):
         if m_l:
             lits = int(m_l.group(1))
         if lits:
-            limits = {100: 220.0, 142: 270.0, 200: 340.0}
+            limits = {100: 230.0, 142: 300.0, 200: 340.0}
             closest_l = min(limits.keys(), key=lambda l: abs(l - lits))
             return precio <= limits[closest_l], f'Congelador (HORIZONTAL {closest_l}LT)'
         # Sin litros reconocibles — no calza con ningún modelo específico de
