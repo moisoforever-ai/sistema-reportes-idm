@@ -1328,6 +1328,14 @@ def buscar_coincidencia_tecnica(fila, universo_maestro):
 def check_promo_status(producto_maestro, precio):
     nombre = estandarizar_texto(producto_maestro)
 
+    # FIX (08/10/2026): pequeños electrodomésticos que NUNCA son promo (la
+    # tabla de promo no tiene ninguna fila para ellos). Un nombre como
+    # "Licuadora ... Split" o "Licuadora con pantalla TV" podía rozar las
+    # palabras clave de otras familias (TV, A/A, Congelador), así que se
+    # descartan primero, antes de mirar cualquier familia.
+    if any(k in nombre for k in ['licuadora', 'batidora', 'nutribullet']):
+        return False, 'No Cesta Básica'
+
     # ACTUALIZACIÓN (07/10/2026, a pedido del cliente): todos los precios tope
     # de esta función se recargaron con la tabla "PROMO - PRIMERA QUINCENA DE
     # OCTUBRE". Cada número de abajo es el precio MÁXIMO para que el producto
@@ -1423,7 +1431,10 @@ def check_promo_status(producto_maestro, precio):
         return False, 'No Cesta Básica'
         
     # 3. Aires Acondicionados
-    elif any(k in nombre for k in ['aire', 'a/a', 'split', 'piso techo']) and 'freidora' not in nombre and 'enfriador' not in nombre:
+    # FIX (08/10/2026): también se reconoce la escritura "A.A" (con punto), que
+    # antes no se detectaba como aire acondicionado y dejaba un A/A de 5000 BTU
+    # fuera de promo aunque su precio calzara.
+    elif (any(k in nombre for k in ['aire', 'a/a', 'split', 'piso techo']) or re.search(r'\ba\.\s?a\b', nombre)) and 'freidora' not in nombre and 'enfriador' not in nombre:
         btu = None
         m_btu = re.search(r'(\d+)\s*(?:btu|mil)', nombre)
         if m_btu:
@@ -1484,9 +1495,18 @@ def check_promo_status(producto_maestro, precio):
     # 4. Televisores
     elif any(k in nombre for k in ['tv', 'televisor']) and 'base' not in nombre and 'soporte' not in nombre:
         size = None
-        m_s = re.search(r'(\d+)\s*(?:"|\'|pulgadas|pulg)', nombre)
+        # FIX (08/10/2026): antes solo se reconocían comillas/"pulg"/"pulgadas".
+        # Un TV escrito como "55 PLG", "55PLG", "55 IN" o "55 INCH" quedaba sin
+        # tamaño y caía en "No Cesta Básica" aunque fuera el TV 55" de la tabla.
+        m_s = re.search(r'(\d+)\s*(?:"|\'|pulgadas|pulgada|pulg|plgs?|inch|in)(?![a-z])', nombre)
         if m_s:
             size = int(m_s.group(1))
+        else:
+            # Sin unidad escrita (ej. "SMART TV DAMASCO 55 4K"): se toma un
+            # número suelto que coincida con un tamaño de la tabla.
+            m_n = re.search(r'(?<![\d.])(32|40|43|50|55|58|65|70|75)(?![\d.a-z])', nombre)
+            if m_n:
+                size = int(m_n.group(1))
             
         is_smart = any(k in nombre for k in ['smart', 'google tv', 'android tv', 'tizen', 'qled'])
         
@@ -1831,6 +1851,21 @@ def filtrar_datos_reporte(fecha, empresa_input, sucursal, hora_apertura_str, hor
 # marcador. PRODUCTO_SIN_VENTAS es el texto único y consistente con el que
 # ese marcador se muestra en todo el reporte (Datos Detallados, etc.),
 # reemplazando el "SIN PRODUCTOS" que se usaba antes.
+# FIX (08/10/2026): cuando el freelance toca "Producto" pero no elige ninguna
+# opción de la lista (ni escribe el nombre a mano), el importador de Apps Script
+# deja el texto "Sin especificar". Antes el matcher difuso lo "empataba" al azar
+# con cualquier producto del catálogo (ej. "TAPÓN VINO CUISINART") y le ponía su
+# precio, inflando las ventas. Ahora queda marcado como producto por identificar,
+# con precio 0, para que se revise en Kobo.
+PRODUCTO_POR_IDENTIFICAR = 'PRODUCTO POR IDENTIFICAR'
+MARCADORES_POR_IDENTIFICAR = {'sin especificar', 'por identificar', 'n/d', ''}
+
+def es_producto_por_identificar(texto):
+    if pd.isna(texto):
+        return True
+    limpio = re.sub(r'\s+', ' ', remover_tildes(str(texto)).lower().strip())
+    return limpio in MARCADORES_POR_IDENTIFICAR
+
 MARCADORES_SIN_VENTAS = {
     'sin productos', 'sin producto',
     'no se observaron ventas', 'no se observo ventas', 'no se observaron venta',
@@ -1911,6 +1946,8 @@ def matchear_productos(df_filtered, df_maestro, prices_numeric, mapeo_precios, m
     def _match_row(row):
         if es_sin_productos.loc[row.name]:
             return PRODUCTO_SIN_VENTAS
+        if es_producto_por_identificar(row['Producto']):
+            return PRODUCTO_POR_IDENTIFICAR
         return buscar_coincidencia_tecnica(row, universo_maestro)
 
     df_filtered['PRODUCTO_CORRECTO'] = df_filtered.apply(_match_row, axis=1)
