@@ -841,14 +841,25 @@ def categorizar_producto(nombre_producto):
     # OTROS. El cliente pidió que CUALQUIER producto con "tope" en el nombre
     # vaya a COCINA, sin esa condición extra. Se quita el requisito de
     # gas/electric/dual.
-    elif (any(k in nombre for k in ['cocina a gas', 'campana', 'estufa', 'cocina', 'sarten', 'cubierto', 'vajilla', 'utensilio', 'cuchillo', 'cuchillos'])
-          or contains_word(nombre, 'tope') or contains_word(nombre, 'topes')
-          or ((contains_word(nombre, 'olla') or contains_word(nombre, 'ollas')) and 'arrocera' not in nombre and 'presion' not in nombre)):
+    # FIX (09/10/2026, a pedido del cliente):
+    # - Las ollas de presión (a presión, incluidas las eléctricas) ahora van a
+    #   COCINA: se quita la exclusión de "presion" de este disparador y se
+    #   saca "olla de presion" de la lista de ELECTRODOMESTICOS más abajo.
+    # - Las ollas arroceras siguen en ELECTRODOMESTICOS (exclusión "arrocera",
+    #   ya existente) y todo producto "multifuncional" también va a
+    #   ELECTRODOMESTICOS: por eso un nombre con "multifuncional" no entra a
+    #   esta rama (ej. "Olla Multifuncional", "Cocina Multifuncional").
+    elif (not any(x in nombre for x in ['multifuncional', 'multifuncion'])
+          and (any(k in nombre for k in ['cocina a gas', 'campana', 'estufa', 'cocina', 'sarten', 'cubierto', 'vajilla', 'utensilio', 'cuchillo', 'cuchillos'])
+               or contains_word(nombre, 'tope') or contains_word(nombre, 'topes')
+               or ((contains_word(nombre, 'olla') or contains_word(nombre, 'ollas')) and 'arrocera' not in nombre))):
         return 'COCINA'
     # 7. COMPUTACION
+    # FIX (09/10/2026, a pedido del cliente): las impresoras (incluidas las
+    # "multifuncionales" de tinta/láser) van a COMPUTACION.
     # FIX (a pedido del cliente, sesión 15): se agregó "internet" (ej. "kit
     # mini de internet") como disparador.
-    elif any(k in nombre for k in ['laptop', 'computadora', 'monitor', 'auriculares', 'audifonos', 'audifono', 'teclado', 'mouse', 'raton', 'router', 'modem', 'tablet', 'tableta', 'internet']) or contains_word(nombre, 'pc') or contains_word(nombre, 'ups'):
+    elif any(k in nombre for k in ['laptop', 'computadora', 'monitor', 'auriculares', 'audifonos', 'audifono', 'teclado', 'mouse', 'raton', 'router', 'modem', 'tablet', 'tableta', 'internet', 'impresora', 'impresoras']) or contains_word(nombre, 'pc') or contains_word(nombre, 'ups'):
         if any(x in nombre for x in ['morral', 'bolso', 'mochila', 'funda']):
             return 'OTROS'
         return 'COMPUTACION'
@@ -888,8 +899,8 @@ def categorizar_producto(nombre_producto):
         'sandwichera', 'waflera', 'batidora', 'procesador', 'arrocera', 'nutribullet', 'hervidor', 'tetera',
         'extractor', 'exprimidor', 'multiolla', 'instant pot', 'parrilla', 'parrillera', 'panini', 'afilador', 'balanza',
         'aspiradora', 'rizador', 'rasuradora', 'recortadora', 'cepillo de dientes',
-        'humificador', 'humidificador', 'picatodo', 'crepera', 'deshidratador', 'cotufera',
-        'espumador', 'yogurtera', 'hidrojet', 'hydrojet', 'microonda', 'olla de presion', 'olla presion',
+        'humificador', 'humidificador', 'picatodo', 'picador', 'crepera', 'deshidratador', 'cotufera',
+        'espumador', 'yogurtera', 'hidrojet', 'hydrojet', 'microonda', 'multifuncional', 'multifuncion',
         'horno tostador', 'horno electrico', 'horno freidora', 'horno freidor', 'tosta horno',
         'ventilador', 'plancha', 'dispensador'
     ])):
@@ -908,7 +919,9 @@ def is_own_brand(marca_db, empresa):
     # "DA+CO | MIDEA" de la tabla ya queda cubierta por "DA+CO" (la
     # comparación es por texto contenido), pero "MIDEA" sola NO es marca propia.
     elif 'damasco' in emp:
-        own_brands = ['DA+CO', 'DACO', 'DAMASCO', 'VENELECTR', 'SYON']
+        # 09/10/2026, a pedido del cliente: MIDEA también cuenta como marca
+        # propia de Damasco (antes solo lo era cuando venía como "DA+CO | MIDEA").
+        own_brands = ['DA+CO', 'DACO', 'DAMASCO', 'VENELECTR', 'SYON', 'MIDEA']
     elif 'multimax' in emp:
         own_brands = ['CLX', 'CONDESA', 'FRIGILUX', 'MILATTI', 'KUCCE', 'VETRUX', 'ITOK', 'MUNDO BLANCO']
     else:
