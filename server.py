@@ -786,7 +786,11 @@ def categorizar_producto(nombre_producto):
     # VENTANA DA+CO 5K BTU 110V" calculaba bien el precio de promo pero caía
     # en OTROS acá. Se agrega "ac" como disparador aparte (con límite de
     # palabra, contains_word, para no capturar cosas como "acero" o "vacío").
-    if ((any(k in nombre for k in ['aire', 'a/a', 'split', 'pisotecho', 'piso techo']) or contains_word(nombre, 'ac'))
+    # FIX (15/10/2026, a pedido del cliente): "A/C" (ej. "A/C VENTANA DAMASCO
+    # 12K BTU") también es aire acondicionado y caía en OTROS: solo se
+    # reconocía "AC" sin barra. Se agrega "a/c" como disparador (con límite de
+    # palabra, igual que "ac").
+    if ((any(k in nombre for k in ['aire', 'a/a', 'split', 'pisotecho', 'piso techo']) or contains_word(nombre, 'ac') or contains_word(nombre, 'a/c'))
             and not any(x in nombre for x in ['freidora', 'fryer', 'purificador', 'cortina', 'alisadora', 'protector de voltaje', 'protector de sobrevoltaje'])):
         return 'A/A'
     # 2. TV
@@ -852,6 +856,9 @@ def categorizar_producto(nombre_producto):
     elif (not any(x in nombre for x in ['multifuncional', 'multifuncion'])
           and (any(k in nombre for k in ['cocina a gas', 'campana', 'estufa', 'cocina', 'sarten', 'cubierto', 'vajilla', 'utensilio', 'cuchillo', 'cuchillos'])
                or contains_word(nombre, 'tope') or contains_word(nombre, 'topes')
+               # FIX (15/10/2026, a pedido del cliente): los hornos "duplo"
+               # (horno doble de cocina) van a COCINA — caían en OTROS.
+               or ('horno' in nombre and 'duplo' in nombre)
                or ((contains_word(nombre, 'olla') or contains_word(nombre, 'ollas')) and 'arrocera' not in nombre))):
         return 'COCINA'
     # 7. COMPUTACION
@@ -965,6 +972,21 @@ def limpiar_descripcion_producto(texto):
         return texto
 
     t = texto.strip()
+
+    # FIX (15/10/2026, a pedido del cliente): en el nombre que se muestra en el
+    # reporte, toda "nevera" se escribe "refrigerador" (el resto de la
+    # especificación queda igual). Solo cambia el texto mostrado: la categoría
+    # (NEVERA), el precio, la promo y el matching ya se calcularon antes con el
+    # nombre original. Respeta mayúsculas/minúsculas y el plural.
+    def _nevera_a_refrigerador(m):
+        palabra = m.group(0)
+        base = 'refrigerador' + ('es' if palabra.lower().endswith('s') else '')
+        if palabra.isupper():
+            return base.upper()
+        if palabra[0].isupper():
+            return base.capitalize()
+        return base
+    t = re.sub(r'\bneveras?\b', _nevera_a_refrigerador, t, flags=re.IGNORECASE)
 
     # Normalizar "DA+CO" (como se ve la marca repetida en el propio nombre)
     # a "DAMASCO", igual que en los reportes de referencia.
