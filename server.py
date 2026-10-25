@@ -1915,6 +1915,151 @@ def es_marcador_sin_ventas(texto):
     return limpio in MARCADORES_SIN_VENTAS
 
 
+# ---------------------------------------------------------------------------
+# IA (Gemini, capa gratuita) — ayuda a emparejar productos escritos a mano
+# ---------------------------------------------------------------------------
+# Solo se consulta para filas cuyo producto NO coincide exacto con el catálogo
+# (ej. el freelancer eligió "no encontrado" y lo tecleó). Los productos elegidos
+# del catálogo en Kobo ya llegan con el nombre exacto y nunca pasan por la IA.
+# Regla de seguridad: la IA solo reemplaza la decisión del matcher difuso cuando
+# elige un candidato con seguridad; si duda, falla o se agota el límite gratuito,
+# el reporte sale igual que antes. Se activa con la variable GEMINI_API_KEY.
+GEMINI_MODELO = os.environ.get('GEMINI_MODELO', 'gemini-flash-latest')
+GEMINI_MAX_PRODUCTOS = 80          # tope por reporte (protege el límite gratuito)
+GEMINI_LOTE = 25                   # productos por llamada
+GEMINI_PRESUPUESTO_SEG = 60        # tiempo máximo total (gunicorn corta a los 120 s)
+_GEMINI_CACHE = {}                 # (producto, marca, empresa) -> (nombre_catalogo | None, seguro)
+_GEMINI_LOCK = threading.Lock()
+
+
+def _gemini_clave():
+    return os.environ.get('GEMINI_API_KEY', '').strip()
+
+
+def _gemini_llamar(prompt, timeout=30):
+    """Devuelve el JSON que responde Gemini, o None si falla (nunca lanza)."""
+    clave = _gemini_clave()
+    if not clave:
+        return None
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODELO}:generateContent"
+    cuerpo = json.dumps({
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {"temperature": 0, "responseMimeType": "application/json"},
+    }).encode('utf-8')
+    for intento in range(2):
+        try:
+            req = urllib.request.Request(url, data=cuerpo, method='POST', headers={
+                'Content-Type': 'application/json', 'x-goog-api-key': clave})
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                j = json.loads(r.read().decode('utf-8'))
+            return json.loads(j['candidates'][0]['content']['parts'][0]['text'])
+        except Exception as e:  # 429 / 5xx / timeout / JSON inválido
+            logging.getLogger(__name__).warning("Gemini intento %s falló: %s", intento + 1, e)
+            time.sleep(3)
+    return None
+
+
+def _gemini_candidatos(texto_estandar, universo_maestro, n=12):
+    """Candidatos del catálogo para un producto: los más parecidos por texto."""
+    from rapidfuzz import process as _rf_process
+    nombres = [u['normalizado'] for u in universo_maestro]
+    top = _rf_process.extract(texto_estandar, nombres, scorer=fuzz.token_set_ratio, limit=n)
+    idxs = [t[2] for t in top]
+    # además, los más parecidos dentro de la misma marca (si el texto la menciona)
+    marcas = {u['marca_normalizada'] for u in universo_maestro if u['marca_normalizada']}
+    marca_en_texto = next((m for m in marcas if len(m) > 2 and re.search(r'\b' + re.escape(m) + r'\b', texto_estandar)), None)
+    if marca_en_texto:
+        sub = [i for i, u in enumerate(universo_maestro) if u['marca_normalizada'] == marca_en_texto]
+        if sub:
+            top2 = _rf_process.extract(texto_estandar, [nombres[i] for i in sub], scorer=fuzz.token_set_ratio, limit=6)
+            idxs += [sub[t[2]] for t in top2]
+    vistos, out = set(), []
+    for i in idxs:
+        if i not in vistos:
+            vistos.add(i)
+            out.append(i)
+    return out[:n + 6]
+
+
+def refinar_con_gemini(df, universo_maestro, empresa_clave=''):
+    """Marca la columna REVISION_IA y corrige PRODUCTO_CORRECTO cuando la IA está segura."""
+    df['REVISION_IA'] = ''
+    if not _gemini_clave():
+        return df
+    try:
+        exactos = {u['normalizado'] for u in universo_maestro}
+        pendientes = {}   # (producto, marca) -> [índices de fila]
+        for idx, row in df.iterrows():
+            prod = row['Producto']
+            if es_marcador_sin_ventas(prod) or es_producto_por_identificar(prod):
+                continue
+            if estandarizar_texto(prod) in exactos:
+                continue
+            marca = '' if pd.isna(row['Marca']) else str(row['Marca'])
+            pendientes.setdefault((str(prod).strip(), marca.strip()), []).append(idx)
+        if not pendientes:
+            return df
+
+        inicio = time.time()
+        por_consultar = []
+        for clave in list(pendientes.keys())[:GEMINI_MAX_PRODUCTOS]:
+            ck = (clave[0].lower(), clave[1].lower(), empresa_clave)
+            if ck not in _GEMINI_CACHE:
+                texto = estandarizar_texto(clave[0])
+                m = remover_tildes(clave[1]).lower().strip()
+                if m and m not in texto:
+                    texto = f"{texto} {m}"
+                por_consultar.append((clave, ck, _gemini_candidatos(texto, universo_maestro)))
+
+        for ini in range(0, len(por_consultar), GEMINI_LOTE):
+            if time.time() - inicio > GEMINI_PRESUPUESTO_SEG:
+                break
+            lote = por_consultar[ini:ini + GEMINI_LOTE]
+            p = ("Eres un asistente que empareja productos de tiendas venezolanas (electrodomésticos, tecnología, hogar) con un catálogo.\n"
+                 "Para cada producto escrito por un freelancer se te dan candidatos numerados. Elige el candidato que sea el MISMO producto: "
+                 "mismo tipo, misma marca y misma capacidad o tamaño (el color y detalles menores no importan).\n"
+                 "Si ninguno es el mismo producto (otra marca, otro tipo u otra capacidad), responde -1. NUNCA inventes ni fuerces una coincidencia.\n"
+                 "Si dudas entre dos, elige el más cercano y pon seguro=false.\n"
+                 "Abreviaturas: AA = aire acondicionado, mil btu = x1000 BTU, nevera = refrigerador, k = kg, L = litros, pie = pies.\n"
+                 "Responde SOLO un arreglo JSON: [{\"i\":0,\"elegido\":3,\"seguro\":true}, ...] donde elegido es el número del candidato (desde 0) o -1.\n\n")
+            for k, (clave, ck, cands) in enumerate(lote):
+                p += f"PRODUCTO {k}: {clave[0]} (marca: {clave[1] or 'N/D'})\n"
+                for m_i, ci in enumerate(cands):
+                    p += f"  {m_i}) {universo_maestro[ci]['original']}\n"
+            resp = _gemini_llamar(p)
+            if not isinstance(resp, list):
+                continue
+            for k, (clave, ck, cands) in enumerate(lote):
+                r = next((x for x in resp if isinstance(x, dict) and str(x.get('i')) == str(k)), None)
+                try:
+                    el = int(r.get('elegido', -1)) if r else -1
+                except (TypeError, ValueError):
+                    el = -1
+                if 0 <= el < len(cands):
+                    with _GEMINI_LOCK:
+                        _GEMINI_CACHE[ck] = (universo_maestro[cands[el]]['original'], bool(r.get('seguro')))
+                else:
+                    with _GEMINI_LOCK:
+                        _GEMINI_CACHE[ck] = (None, False)
+
+        for clave, filas in pendientes.items():
+            ck = (clave[0].lower(), clave[1].lower(), empresa_clave)
+            if ck not in _GEMINI_CACHE:
+                continue
+            nombre, seguro = _GEMINI_CACHE[ck]
+            for idx in filas:
+                if nombre and seguro:
+                    df.at[idx, 'REVISION_IA'] = 'IA: ' + nombre
+                    df.at[idx, 'PRODUCTO_CORRECTO'] = nombre
+                elif nombre:
+                    df.at[idx, 'REVISION_IA'] = 'IA DUDOSA (se mantuvo el emparejamiento automático)'
+                else:
+                    df.at[idx, 'REVISION_IA'] = 'IA: NO ESTÁ EN EL CATÁLOGO (se mantuvo el emparejamiento automático)'
+    except Exception as e:
+        logging.getLogger(__name__).warning("refinar_con_gemini falló, se sigue sin IA: %s", e)
+    return df
+
+
 def matchear_productos(df_filtered, df_maestro, prices_numeric, mapeo_precios, mapeo_marcas):
     """
     Construye el universo maestro estandarizado a partir de df_maestro y corre el
@@ -1986,6 +2131,7 @@ def matchear_productos(df_filtered, df_maestro, prices_numeric, mapeo_precios, m
         return buscar_coincidencia_tecnica(row, universo_maestro)
 
     df_filtered['PRODUCTO_CORRECTO'] = df_filtered.apply(_match_row, axis=1)
+    df_filtered = refinar_con_gemini(df_filtered, universo_maestro, str(len(universo_maestro)))
     df_filtered['PRECIO_MAESTRO'] = df_filtered['PRODUCTO_CORRECTO'].map(mapeo_precios).fillna(0.0).apply(round_half_up)
     df_filtered['MARCA_MAESTRA'] = df_filtered['PRODUCTO_CORRECTO'].map(mapeo_marcas).fillna("Desconocida")
     df_filtered['VENTA_TOTAL'] = df_filtered['PRECIO_MAESTRO'] * df_filtered['Cantidad']
@@ -3649,6 +3795,29 @@ def generate_report():
             ws_desc.column_dimensions['C'].width = 12
             ws_desc.column_dimensions['D'].width = 12
             ws_desc.column_dimensions['E'].width = 15
+
+        # Hoja de revisión: productos que decidió (o dudó) la IA. Va al final del libro
+        # para no mover las demás hojas ni las tablas dinámicas.
+        if 'REVISION_IA' in df_filtered.columns and (df_filtered['REVISION_IA'] != '').any():
+            ws_ia = wb.create_sheet(title="REVISION IA")
+            ws_ia.append(["PRODUCTO ESCRITO POR EL FREELANCER", "MARCA", "PRODUCTO USADO EN EL REPORTE", "RESULTADO DE LA IA"])
+            for c in ws_ia[1]:
+                c.font = Font(bold=True)
+            ya = set()
+            for _, r_ia in df_filtered[df_filtered['REVISION_IA'] != ''].iterrows():
+                k_ia = (str(r_ia['Producto']), str(r_ia['Marca']), str(r_ia['PRODUCTO_CORRECTO']))
+                if k_ia in ya:
+                    continue
+                ya.add(k_ia)
+                ws_ia.append([str(r_ia['Producto']), '' if pd.isna(r_ia['Marca']) else str(r_ia['Marca']),
+                              str(r_ia['PRODUCTO_CORRECTO']), r_ia['REVISION_IA']])
+                if 'DUDOSA' in r_ia['REVISION_IA'] or 'NO ESTÁ' in r_ia['REVISION_IA']:
+                    for c in ws_ia[ws_ia.max_row]:
+                        c.fill = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
+            ws_ia.column_dimensions['A'].width = 50
+            ws_ia.column_dimensions['B'].width = 15
+            ws_ia.column_dimensions['C'].width = 60
+            ws_ia.column_dimensions['D'].width = 60
 
         # Convert all string cell values to uppercase and strip accents
         for ws in wb.worksheets:
