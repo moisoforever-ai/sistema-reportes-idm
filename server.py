@@ -4,6 +4,7 @@ import io
 import time
 import unicodedata
 import urllib.request
+import urllib.error
 import threading
 from datetime import datetime
 import pandas as pd
@@ -1924,7 +1925,7 @@ def es_marcador_sin_ventas(texto):
 # Regla de seguridad: la IA solo reemplaza la decisión del matcher difuso cuando
 # elige un candidato con seguridad; si duda, falla o se agota el límite gratuito,
 # el reporte sale igual que antes. Se activa con la variable GEMINI_API_KEY.
-GEMINI_MODELO = os.environ.get('GEMINI_MODELO', 'gemini-flash-latest')
+GEMINI_MODELOS = [m.strip() for m in os.environ.get('GEMINI_MODELO', 'gemini-2.5-flash-lite,gemini-2.5-flash,gemini-flash-latest').split(',') if m.strip()]
 GEMINI_MAX_PRODUCTOS = 80          # tope por reporte (protege el límite gratuito)
 GEMINI_LOTE = 25                   # productos por llamada
 GEMINI_PRESUPUESTO_SEG = 60        # tiempo máximo total (gunicorn corta a los 120 s)
@@ -1937,25 +1938,38 @@ def _gemini_clave():
 
 
 def _gemini_llamar(prompt, timeout=30):
-    """Devuelve el JSON que responde Gemini, o None si falla (nunca lanza)."""
+    """Devuelve el JSON que responde Gemini, o None si falla (nunca lanza).
+    Prueba los modelos de GEMINI_MODELOS en orden (si uno no existe o no tiene cupo gratuito, pasa al siguiente)."""
     clave = _gemini_clave()
     if not clave:
         return None
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODELO}:generateContent"
     cuerpo = json.dumps({
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {"temperature": 0, "responseMimeType": "application/json"},
     }).encode('utf-8')
-    for intento in range(2):
-        try:
-            req = urllib.request.Request(url, data=cuerpo, method='POST', headers={
-                'Content-Type': 'application/json', 'x-goog-api-key': clave})
-            with urllib.request.urlopen(req, timeout=timeout) as r:
-                j = json.loads(r.read().decode('utf-8'))
-            return json.loads(j['candidates'][0]['content']['parts'][0]['text'])
-        except Exception as e:  # 429 / 5xx / timeout / JSON inválido
-            logging.getLogger(__name__).warning("Gemini intento %s falló: %s", intento + 1, e)
-            time.sleep(3)
+    log = logging.getLogger(__name__)
+    for modelo in GEMINI_MODELOS:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{modelo}:generateContent"
+        for intento in range(2):
+            try:
+                req = urllib.request.Request(url, data=cuerpo, method='POST', headers={
+                    'Content-Type': 'application/json', 'x-goog-api-key': clave})
+                with urllib.request.urlopen(req, timeout=timeout) as r:
+                    j = json.loads(r.read().decode('utf-8'))
+                return json.loads(j['candidates'][0]['content']['parts'][0]['text'])
+            except urllib.error.HTTPError as e:
+                try:
+                    detalle = e.read().decode('utf-8', 'ignore')[:200].replace('\n', ' ')
+                except Exception:
+                    detalle = ''
+                log.warning("Gemini %s -> HTTP %s %s", modelo, e.code, detalle)
+                if e.code in (500, 503):
+                    time.sleep(3)
+                    continue
+                break  # 429/404/403/400: probar el siguiente modelo
+            except Exception as e:
+                log.warning("Gemini %s falló: %s", modelo, e)
+                break
     return None
 
 
