@@ -770,6 +770,12 @@ def find_previous_study_df(df_all, current_date_str, empresa, sucursal, col_sucu
 def contains_word(text, word):
     return any(w == word for w in re.findall(r'[a-z0-9+/]+', text.lower()))
 
+def _menciona_tv(nombre):
+    """True si el nombre habla de un televisor. "tv" debe ir como palabra aparte
+    (28/10/2026: "LICUADORA ... DM-009TV" caía en TV porque el código del modelo
+    termina en "TV"; ahora "tv" no cuenta si va pegado a letras o números antes)."""
+    return 'televisor' in nombre or re.search(r'(?<![a-z0-9])tv(?![a-z])', nombre) is not None
+
 def categorizar_producto(nombre_producto):
     nombre = remover_tildes(str(nombre_producto).lower().strip())
     
@@ -799,7 +805,7 @@ def categorizar_producto(nombre_producto):
     # Era muy genérico — cualquier electrodoméstico con display digital
     # ("Licuadora con pantalla", "Nevera con pantalla") caía como TV por
     # error. Ahora hace falta que diga "tv" o "televisor" explícitamente.
-    elif any(k in nombre for k in ['tv', 'televisor']) and 'base' not in nombre and 'soporte' not in nombre:
+    elif _menciona_tv(nombre) and 'base' not in nombre and 'soporte' not in nombre:
         return 'TV'
     # 3. LAVADO
     elif any(k in nombre for k in ['lavadora', 'secadora', 'doble tina', 'semiautomatica']):
@@ -1529,7 +1535,7 @@ def check_promo_status(producto_maestro, precio):
         return False, 'No Cesta Básica'
         
     # 4. Televisores
-    elif any(k in nombre for k in ['tv', 'televisor']) and 'base' not in nombre and 'soporte' not in nombre:
+    elif _menciona_tv(nombre) and 'base' not in nombre and 'soporte' not in nombre:
         size = None
         # FIX (08/10/2026): antes solo se reconocían comillas/"pulg"/"pulgadas".
         # Un TV escrito como "55 PLG", "55PLG", "55 IN" o "55 INCH" quedaba sin
