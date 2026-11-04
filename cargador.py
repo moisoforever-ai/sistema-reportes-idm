@@ -380,11 +380,30 @@ def init_cargador(app, G):
         return jsonify({'success': True, 'tiendas': tiendas, 'guarda': sheets_configurado(),
                         'ia': bool(G['_gemini_clave']())})
 
+    def _a_fecha(txt):
+        t = str(txt or '').strip()
+        m = re.match(r'^(\d{4})-(\d{2})-(\d{2})', t)
+        try:
+            if m:
+                return datetime(int(m.group(1)), int(m.group(2)), int(m.group(3))).date()
+            m = re.match(r'^(\d{1,2})/(\d{1,2})/(\d{4})', t)
+            if m:
+                return datetime(int(m.group(3)), int(m.group(2)), int(m.group(1))).date()
+        except ValueError:
+            pass
+        return None
+
     @bp.route('/api/cargar/recientes')
     def recientes():
+        """Todas las horas cargadas de los últimos `dias` días (por defecto 10), de la más nueva a la más vieja.
+        Incluye las que vinieron de Kobo y las cargadas desde esta página."""
         if not logueado():
             return jsonify({'success': False, 'error': 'No autorizado'}), 401
         try:
+            try:
+                dias = max(1, min(60, int(request.args.get('dias', '10'))))
+            except ValueError:
+                dias = 10
             if sheets_configurado():
                 v = _leer_hoja(HOJA_TIPIFICACIONES, "A:N")
                 filas = [list(r) + [''] * (14 - len(r)) for r in v[1:]]
@@ -398,15 +417,27 @@ def init_cargador(app, G):
                     continue
                 g = grupos.get(r[0])
                 if g is None:
-                    cod = por_nombre.get(r[5]) or str(r[4])
+                    cod = re.sub(r'^([A-Z]{2})[\s*_.\-]*0*(\d+)$', r'\1-\2', str(r[4]).strip().upper())   # AW*35 -> AW-35
+                    if cod not in TIENDAS:
+                        cod = por_nombre.get(r[5]) or str(r[4])
                     g = grupos[r[0]] = {'id': r[0], 'fecha': str(r[1])[:10], 'horario': r[2], 'empresa': r[3],
                                         'codigo': cod, 'tienda': r[5], 'prods': 0, 'visitas': r[13]}
                     orden.append(r[0])
                 if str(r[8]).strip().lower() not in ('sin productos', ''):
                     g['prods'] += 1
-            out = [grupos[i] for i in orden][-600:]
+            todas = [grupos[i] for i in orden]
+            hoy = datetime.now().date()
+            fechas = [d for d in (_a_fecha(g['fecha']) for g in todas) if d]
+            # la ventana se mide hacia atrás desde la fecha más reciente cargada (o hoy, lo que sea mayor)
+            tope = max([hoy] + fechas) if fechas else hoy
+            sel = []
+            for i, g in enumerate(todas):
+                d = _a_fecha(g['fecha'])
+                if d is None or (tope - d).days < dias or i >= len(todas) - 60:
+                    sel.append(g)
+            out = sel[-5000:]
             out.reverse()          # lo último que entró primero
-            return jsonify({'success': True, 'cargas': out})
+            return jsonify({'success': True, 'cargas': out, 'dias': dias})
         except Exception as e:
             app.logger.error("recientes: %s", e, exc_info=True)
             return jsonify({'success': False, 'error': str(e)}), 500

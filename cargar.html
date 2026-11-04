@@ -76,6 +76,15 @@ tr.rev{background:var(--warn)}
 .leg{display:flex;flex-wrap:wrap;gap:14px;font-size:11px;color:var(--mut)}
 .leg i{width:10px;height:10px;border-radius:3px;display:inline-block;margin-right:6px;vertical-align:-1px}
 .det{background:#f4f4f2;border-radius:10px;padding:12px 14px;font-size:12px;line-height:1.5;min-height:36px}
+.sm{padding:7px 10px;font-size:12px;border-radius:8px}
+.fr{display:flex;flex-direction:column;gap:7px;width:100%;border:0;border-top:1px solid #ececea;background:transparent;padding:12px 6px;border-radius:8px;text-align:left}
+.fr:hover{background:#f1f1ef}
+.fr b{font-size:13px;font-weight:600}
+.fr .t{font-size:12px;color:var(--mut)}
+.hc{display:flex;flex-wrap:wrap;gap:5px}
+.hc i{font-style:normal;font-size:11px;font-weight:600;padding:3px 9px;border-radius:999px;background:var(--warn-c);color:var(--warn-t)}
+.hc i.b{background:#f1f1ef;color:var(--mut);font-weight:500}
+.okmsg{background:var(--ac-l);color:var(--ac-d);border-radius:10px;padding:12px 14px;font-size:12px}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
 .chips button{border:1px solid #e2e2de;background:#fff;color:var(--mut);padding:6px 12px;border-radius:999px;font-size:12px;font-weight:500}
 .chips button.on{border-color:var(--ac);background:var(--ac-l);color:var(--ac-d)}
@@ -142,6 +151,14 @@ tr.rev{background:var(--warn)}
 <aside>
   <div class="card">
     <div>
+      <h2>Horas que faltan</h2>
+      <p class="sub" id="falt-res">Revisando…</p>
+    </div>
+    <div class="rowf" id="falt-ctl"></div>
+    <div id="falt-lista"></div>
+  </div>
+  <div class="card">
+    <div>
       <h2>Horas de la tienda</h2>
       <p class="sub" id="tl-titulo">Elige una tienda para ver qué horas faltan.</p>
     </div>
@@ -163,7 +180,7 @@ tr.rev{background:var(--warn)}
 <script>
 (function(){
 var EMP=[{id:'ddaka',n:'Daka'},{id:'ddamasco',n:'Damasco'},{id:'mmultimax',n:'Multimax'}];
-var S={empresa:'ddaka',busca:'',tienda:null,fecha:hoy(),tiendas:[],cargas:[],filtro:'todas',slot:null,guarda:false,analisis:null,guardando:false};
+var S={empresa:'ddaka',busca:'',tienda:null,fecha:hoy(),tiendas:[],cargas:[],filtro:'todas',slot:null,guarda:false,analisis:null,guardando:false,dias:10,ini:9,fin:19,solo:false,verMas:false};
 function $(id){return document.getElementById(id)}
 function h(tag,props,kids){var e=document.createElement(tag);props=props||{};for(var k in props){if(k==='class')e.className=props[k];else if(k==='text')e.textContent=props[k];else if(k.slice(0,2)==='on')e.addEventListener(k.slice(2),props[k]);else if(props[k]!==false&&props[k]!==null)e.setAttribute(k,props[k]===true?'':props[k]);}(kids||[]).forEach(function(c){if(c==null)return;e.appendChild(typeof c==='string'?document.createTextNode(c):c)});return e}
 function hoy(){var d=new Date();return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2)}
@@ -214,7 +231,41 @@ function pintaRecientes(){
     h('span',{class:'a'},[h('b',{text:horarioTxt(c.horario)}),h('span',{text:c.codigo+' '+(t?t.nombre:c.tienda)+' · '+fechaTxt(c.fecha)})]),
     h('span',{class:'b'},[h('b',{text:c.prods+' prod.'}),h('span',{text:(c.visitas||'—')+' visitas'})])]))});
 }
-function pinta(){pintaEmpresas();pintaTiendas();pintaSlots();pintaRecientes()}
+function faltantes(){
+  var m={};
+  S.cargas.forEach(function(c){var a=horaInicio(c.horario);if(a===null||!tiendaObj(c.codigo))return;var d=isoFecha(c.fecha);var k=c.codigo+'|'+d;
+    var e=m[k]||(m[k]={codigo:c.codigo,tienda:c.tienda,fecha:d,hs:{}});e.hs[a]=1});
+  var lim=new Date();lim.setHours(0,0,0,0);lim.setDate(lim.getDate()-(S.dias-1));
+  var out=[];
+  Object.keys(m).forEach(function(k){var e=m[k];var dt=new Date(e.fecha+'T00:00:00');if(isNaN(dt)||dt<lim)return;
+    var hs=Object.keys(e.hs).map(Number);var mn=Math.min.apply(null,hs),mx=Math.max.apply(null,hs);
+    var hue=[],bor=[];
+    for(var x=S.ini;x<S.fin;x++){if(e.hs[x])continue;if(x>mn&&x<mx)hue.push(x);else bor.push(x)}
+    if(S.solo)bor=[];
+    if(hue.length||bor.length)out.push({codigo:e.codigo,tienda:e.tienda,fecha:e.fecha,hue:hue,bor:bor,n:Object.keys(e.hs).length});
+  });
+  out.sort(function(a,b){return a.fecha<b.fecha?1:a.fecha>b.fecha?-1:(b.hue.length-a.hue.length)});
+  return out;
+}
+function selOpt(id,vals,cur,fmt,cb){var sel=h('select',{class:'inp sm','aria-label':id,onchange:function(e){cb(parseInt(e.target.value,10))}});vals.forEach(function(v){var o=h('option',{value:String(v),text:fmt(v)});if(v===cur)o.selected=true;sel.appendChild(o)});return sel}
+function pintaFaltantes(){
+  var ctl=$('falt-ctl');ctl.innerHTML='';
+  ctl.appendChild(selOpt('Días a revisar',[3,7,10,14],S.dias,function(v){return 'Últimos '+v+' días'},function(v){S.dias=v;pintaFaltantes()}));
+  ctl.appendChild(selOpt('Desde la hora',[6,7,8,9,10,11,12],S.ini,function(v){return 'Desde '+horaTxt(v)},function(v){S.ini=v;pintaFaltantes()}));
+  ctl.appendChild(selOpt('Hasta la hora',[15,16,17,18,19,20,21,22],S.fin,function(v){return 'Hasta '+horaTxt(v)},function(v){S.fin=v;pintaFaltantes()}));
+  var lab=h('label',{class:'hint',style:'display:flex;align-items:center;gap:6px'},[h('input',{type:'checkbox',checked:S.solo,onchange:function(e){S.solo=e.target.checked;pintaFaltantes()}}),'Solo huecos']);ctl.appendChild(lab);
+  var L=faltantes(),c=$('falt-lista');c.innerHTML='';
+  var nh=0,nb=0;L.forEach(function(x){nh+=x.hue.length;nb+=x.bor.length});
+  $('falt-res').textContent=L.length?(nh+' hora(s) con hueco'+(S.solo?'':' y '+nb+' sin cargar al inicio o al cierre')+' en '+L.length+' tienda(s)-día. Solo se revisan tiendas con al menos una hora cargada ese día.'):'Todo al día: no faltan horas en los últimos '+S.dias+' días.';
+  if(!L.length){c.appendChild(h('div',{class:'okmsg',text:'✔ Sin horas pendientes en el rango elegido.'}));return}
+  (S.verMas?L:L.slice(0,6)).forEach(function(x){
+    var chips=h('div',{class:'hc'});x.hue.forEach(function(v){chips.appendChild(h('i',{text:horaTxt(v)}))});x.bor.forEach(function(v){chips.appendChild(h('i',{class:'b',text:horaTxt(v)}))});
+    c.appendChild(h('button',{class:'fr',onclick:function(){var t=tiendaObj(x.codigo);if(t)S.empresa=t.empresa;S.tienda=x.codigo;S.fecha=x.fecha;$('fecha').value=x.fecha;S.slot=(x.hue[0]!==undefined?x.hue[0]:x.bor[0]);S.busca='';$('busca').value='';pinta()}},[
+      h('b',{text:x.codigo+' · '+fechaTxt(x.fecha)}),h('span',{class:'t',text:(tiendaObj(x.codigo)?tiendaObj(x.codigo).nombre:x.tienda)+' · '+x.n+' hora(s) cargadas'}),chips]));
+  });
+  if(L.length>6)c.appendChild(h('button',{class:'lnk',text:S.verMas?'Ver menos':'Ver las '+L.length,style:'margin-top:8px',onclick:function(){S.verMas=!S.verMas;pintaFaltantes()}}));
+}
+function pinta(){pintaEmpresas();pintaTiendas();pintaSlots();pintaRecientes();pintaFaltantes()}
 
 /* ---------- vista previa ---------- */
 function aviso(el,cls,txt){el.innerHTML='';if(txt)el.appendChild(h('div',{class:'banner '+cls,text:txt}))}
@@ -343,7 +394,7 @@ function borrarHora(id){
     S.analisis=null;$('preview').style.display='none';S.slot=null;cargarRecientes();
   }).catch(function(){aviso(res,'err','No hubo conexión con el servidor.')});
 }
-function cargarRecientes(){api('/api/cargar/recientes').then(function(j){if(j.success){S.cargas=j.cargas;pintaSlots();pintaRecientes()}})}
+function cargarRecientes(){api('/api/cargar/recientes?dias=14').then(function(j){if(j.success){S.cargas=j.cargas;pintaSlots();pintaRecientes();pintaFaltantes()}})}
 
 /* ---------- arranque ---------- */
 $('fecha').value=S.fecha;
