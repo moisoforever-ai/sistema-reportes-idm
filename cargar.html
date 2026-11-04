@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sistema de Reportes · Cargar mensajes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600&display=swap">
+<style>
+:root{--ink:#3d3d3d;--mut:#6b6b68;--line:#e6e6e3;--bg:#f7f7f6;--ac:#0f6b63;--ac-d:#0b544e;--ac-l:#e7f3f1;--warn:#fff8e1;--warn-c:#ffe9a8;--warn-t:#6b4a00}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:'Montserrat',system-ui,sans-serif;font-size:14px}
+button,input,textarea{font-family:inherit;color:inherit}
+button{cursor:pointer}
+button:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
+header{background:#fff;border-bottom:1px solid var(--line);padding:18px 40px;display:flex;flex-wrap:wrap;align-items:center;gap:20px}
+header img{height:44px;width:auto;display:block}
+.sep{width:1px;height:32px;background:#dcdcd8}
+h1{margin:0;font-size:18px;font-weight:300;letter-spacing:.32em}
+nav{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto}
+nav a{padding:9px 16px;border-radius:8px;font-size:13px;font-weight:500;color:var(--mut);text-decoration:none}
+nav a.on{background:var(--ac);color:#fff}
+nav a:hover:not(.on){background:#f1f1ef}
+main{max-width:1280px;margin:0 auto;padding:32px 40px 56px;display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start}
+.col{flex:999 1 620px;min-width:0;display:flex;flex-direction:column;gap:20px}
+aside{flex:1 1 340px;min-width:0;display:flex;flex-direction:column;gap:20px}
+.card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:28px;display:flex;flex-direction:column;gap:22px}
+aside .card{padding:24px;gap:16px}
+h2{margin:0 0 4px;font-size:17px;font-weight:600}
+aside h2{font-size:15px}
+.sub{margin:0;color:var(--mut);font-size:13px;line-height:1.5}
+aside .sub{font-size:12px}
+.lbl{font-size:12px;font-weight:600;letter-spacing:.08em;color:var(--mut)}
+.grp{display:flex;flex-direction:column;gap:10px}
+.rowf{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.seg button{border:1px solid #d8d8d4;background:#fff;padding:10px 20px;border-radius:10px;font-size:13px;font-weight:500}
+.seg button.on{background:var(--ac);border-color:var(--ac);color:#fff}
+.inp{padding:11px 14px;border:1px solid #d8d8d4;border-radius:10px;font-size:13px;background:#fff}
+.tiendas{max-height:178px;overflow-y:auto;border:1px solid #ececea;border-radius:10px;padding:8px;display:flex;flex-wrap:wrap;gap:6px;background:#fbfbfa}
+.tiendas button{border:1px solid #e2e2de;background:#fff;padding:7px 11px;border-radius:8px;font-size:12px}
+.tiendas button.on{border-color:var(--ac);background:var(--ac-l);color:var(--ac-d)}
+.tiendas b{font-weight:600}
+.sel{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--ac)}
+.sel i{width:8px;height:8px;border-radius:50%;background:var(--ac);display:inline-block}
+textarea.inp{width:100%;min-height:200px;line-height:1.55;resize:vertical}
+.btn{border:0;background:var(--ac);color:#fff;padding:12px 22px;border-radius:10px;font-size:13px;font-weight:600}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn2{border:1px solid #d8d8d4;background:#fff;padding:11px 18px;border-radius:10px;font-size:13px;font-weight:500}
+.hint{font-size:12px;color:var(--mut)}
+.banner{border-radius:10px;padding:12px 16px;font-size:13px;line-height:1.5}
+.banner.warn{background:var(--warn);color:var(--warn-t)}
+.banner.ok{background:var(--ac-l);color:var(--ac-d)}
+.banner.err{background:#fde8e8;color:#8a1c1c}
+.blk{border:1px solid var(--line);border-radius:12px;padding:18px;display:flex;flex-direction:column;gap:12px}
+.blk.dup{opacity:.55}
+.blkh{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.pill{background:var(--ac-l);color:var(--ac-d);padding:6px 12px;border-radius:999px;font-size:12px;font-weight:500}
+.tw{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px;min-width:600px}
+th{text-align:left;color:var(--mut);font-size:11px;letter-spacing:.08em;padding:8px 10px;font-weight:600}
+td{padding:10px;border-top:1px solid #ececea;vertical-align:top}
+tr.rev{background:var(--warn)}
+.chip{display:inline-block;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:600;background:var(--ac-l);color:var(--ac-d)}
+.chip.rev{background:var(--warn-c);color:var(--warn-t)}
+.nota{display:block;font-size:11px;color:var(--mut);margin-top:3px}
+.lnk{border:0;background:none;color:var(--ac);font-size:12px;font-weight:600;padding:2px 0;text-decoration:underline}
+.bus{margin-top:6px;border:1px solid var(--line);border-radius:10px;background:#fff;padding:8px;display:flex;flex-direction:column;gap:4px;max-width:520px}
+.bus button{text-align:left;border:0;background:transparent;padding:7px 8px;border-radius:8px;font-size:12px;display:flex;justify-content:space-between;gap:10px}
+.bus button:hover{background:#f1f1ef}
+.slots{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.slot{border:1.5px dashed #b9b9b4;background:#fff;color:var(--mut);border-radius:10px;padding:9px 4px;text-align:center}
+.slot.ok{border:1px solid var(--ac);background:var(--ac);color:#fff}
+.slot.cur{outline:3px solid #9ad0c9}
+.slot b{display:block;font-size:12px;font-weight:600}
+.slot span{display:block;font-size:10px;margin-top:2px;opacity:.85}
+.leg{display:flex;flex-wrap:wrap;gap:14px;font-size:11px;color:var(--mut)}
+.leg i{width:10px;height:10px;border-radius:3px;display:inline-block;margin-right:6px;vertical-align:-1px}
+.det{background:#f4f4f2;border-radius:10px;padding:12px 14px;font-size:12px;line-height:1.5;min-height:36px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chips button{border:1px solid #e2e2de;background:#fff;color:var(--mut);padding:6px 12px;border-radius:999px;font-size:12px;font-weight:500}
+.chips button.on{border-color:var(--ac);background:var(--ac-l);color:var(--ac-d)}
+.rec{display:flex;justify-content:space-between;align-items:center;gap:12px;width:100%;border:0;border-top:1px solid #ececea;background:transparent;padding:12px 6px;border-radius:8px;text-align:left}
+.rec:hover{background:#f1f1ef}
+.rec .a{display:flex;flex-direction:column;gap:3px;min-width:0}
+.rec .a b{font-size:13px;font-weight:600}
+.rec .a span{font-size:12px;color:var(--mut);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rec .b{display:flex;flex-direction:column;gap:3px;text-align:right;flex-shrink:0}
+.rec .b b{font-size:13px;color:var(--ac)}
+.rec .b span{font-size:11px;color:var(--mut)}
+@media(max-width:700px){header{padding:14px 16px}main{padding:20px 16px 40px}.card{padding:18px}h1{font-size:14px;letter-spacing:.2em}}
+</style>
+</head>
+<body>
+<header>
+  <img src="/idm_logo.png" alt="IDM">
+  <div class="sep"></div>
+  <h1>SISTEMA DE REPORTES</h1>
+  <nav>
+    <a class="on" href="/cargar">Cargar mensajes</a>
+    <a href="/">Generar reporte</a>
+  </nav>
+</header>
+
+<main>
+<section class="col">
+  <div id="aviso-config"></div>
+  <div class="card">
+    <div>
+      <h2>Cargar mensajes de WhatsApp</h2>
+      <p class="sub">Elige la tienda, pega uno o varios mensajes y revisa antes de guardar.</p>
+    </div>
+    <div class="grp">
+      <span class="lbl">1 · EMPRESA</span>
+      <div class="rowf seg" id="empresas"></div>
+    </div>
+    <div class="grp">
+      <span class="lbl">2 · TIENDA Y FECHA</span>
+      <div class="rowf">
+        <label for="busca" style="position:absolute;left:-9999px">Buscar tienda o código</label>
+        <input id="busca" class="inp" type="text" placeholder="Buscar tienda o código (ej: BW-17)" style="flex:1 1 280px;min-width:0">
+        <label for="fecha" class="hint">Fecha</label>
+        <input id="fecha" class="inp" type="date">
+      </div>
+      <div class="tiendas" id="tiendas"></div>
+      <div class="sel" id="sel"></div>
+    </div>
+    <div class="grp">
+      <span class="lbl">3 · MENSAJE(S)</span>
+      <label for="msg" style="position:absolute;left:-9999px">Mensaje de WhatsApp</label>
+      <textarea id="msg" class="inp" placeholder="Pega aquí el mensaje. Si hay varias horas, pégalas una debajo de otra."></textarea>
+      <div class="rowf">
+        <button class="btn" id="btn-analizar">Analizar mensaje</button>
+        <button class="btn2" id="btn-limpiar">Limpiar</button>
+        <span class="hint">Si una hora ya estaba cargada, se reemplaza (no se duplica).</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" id="preview" style="display:none"></div>
+</section>
+
+<aside>
+  <div class="card">
+    <div>
+      <h2>Horas de la tienda</h2>
+      <p class="sub" id="tl-titulo">Elige una tienda para ver qué horas faltan.</p>
+    </div>
+    <div class="slots" id="slots"></div>
+    <div class="leg"><span><i style="background:var(--ac)"></i>Cargada</span><span><i style="border:1.5px dashed #b9b9b4"></i>Falta</span></div>
+    <div class="det" id="det">Toca una hora para ver el detalle.</div>
+  </div>
+  <div class="card">
+    <div>
+      <h2>Últimas horas agregadas</h2>
+      <p class="sub">Toca una para ver esa tienda en el panel de arriba.</p>
+    </div>
+    <div class="chips" id="filtros"></div>
+    <div id="recientes"></div>
+  </div>
+</aside>
+</main>
+
+<script>
+(function(){
+var EMP=[{id:'ddaka',n:'Daka'},{id:'ddamasco',n:'Damasco'},{id:'mmultimax',n:'Multimax'}];
+var S={empresa:'ddaka',busca:'',tienda:null,fecha:hoy(),tiendas:[],cargas:[],filtro:'todas',slot:null,guarda:false,analisis:null,guardando:false};
+function $(id){return document.getElementById(id)}
+function h(tag,props,kids){var e=document.createElement(tag);props=props||{};for(var k in props){if(k==='class')e.className=props[k];else if(k==='text')e.textContent=props[k];else if(k.slice(0,2)==='on')e.addEventListener(k.slice(2),props[k]);else if(props[k]!==false&&props[k]!==null)e.setAttribute(k,props[k]===true?'':props[k]);}(kids||[]).forEach(function(c){if(c==null)return;e.appendChild(typeof c==='string'?document.createTextNode(c):c)});return e}
+function hoy(){var d=new Date();return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2)}
+function isoFecha(s){s=String(s||'').trim();var m=s.match(/^(\d{4})-(\d{2})-(\d{2})/);if(m)return m[1]+'-'+m[2]+'-'+m[3];m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);if(m)return m[3]+'-'+('0'+m[2]).slice(-2)+'-'+('0'+m[1]).slice(-2);return s}
+function fechaTxt(iso){var p=isoFecha(iso).split('-');return p.length===3?p[2]+'/'+p[1]+'/'+p[0]:iso}
+function horaTxt(h24){var s=h24>=12&&h24<24?'pm':'am';var x=h24%12;if(x===0)x=12;return x+' '+s}
+function horaInicio(hor){var m=String(hor||'').match(/^(\d{1,2})_\d{2}(am|pm)/i);if(!m)return null;var x=parseInt(m[1],10)%12;if(m[2].toLowerCase()==='pm')x+=12;return x}
+function horarioTxt(hor){var a=horaInicio(hor);return a===null?String(hor):horaTxt(a)+' a '+horaTxt((a+1)%24)}
+function api(url,opt){return fetch(url,opt).then(function(r){return r.json().then(function(j){if(!r.ok&&!j.error)j.error='Error '+r.status;return j})})}
+
+/* ---------- empresa / tiendas ---------- */
+function pintaEmpresas(){var c=$('empresas');c.innerHTML='';EMP.forEach(function(e){c.appendChild(h('button',{class:S.empresa===e.id?'on':'','aria-pressed':S.empresa===e.id?'true':'false',text:e.n,onclick:function(){S.empresa=e.id;S.tienda=null;S.busca='';$('busca').value='';S.slot=null;pinta()}}))})}
+function tiendaObj(cod){return S.tiendas.filter(function(t){return t.codigo===cod})[0]}
+function pintaTiendas(){
+  var q=S.busca.trim().toLowerCase();var c=$('tiendas');c.innerHTML='';
+  var l=S.tiendas.filter(function(t){return t.empresa===S.empresa&&(!q||t.codigo.toLowerCase().indexOf(q)>=0||t.nombre.toLowerCase().indexOf(q)>=0)});
+  l.forEach(function(t){c.appendChild(h('button',{class:S.tienda===t.codigo?'on':'','aria-pressed':S.tienda===t.codigo?'true':'false',onclick:function(){S.tienda=t.codigo;S.slot=null;pinta()}},[h('b',{text:t.codigo}),' ',t.nombre]))});
+  if(!l.length)c.appendChild(h('span',{class:'hint',text:'No hay tiendas con ese texto.',style:'padding:10px'}));
+  var s=$('sel');s.innerHTML='';if(S.tienda){var t=tiendaObj(S.tienda);s.appendChild(h('i'));s.appendChild(h('span',{},['Tienda seleccionada: ',h('b',{text:S.tienda+' · '+(t?t.nombre:'')})]))}
+}
+
+/* ---------- panel de horas ---------- */
+function cargasTienda(){return S.cargas.filter(function(c){return c.codigo===S.tienda&&isoFecha(c.fecha)===S.fecha})}
+function pintaSlots(){
+  var c=$('slots');c.innerHTML='';var det=$('det');var t=tiendaObj(S.tienda);var cs=cargasTienda();
+  $('tl-titulo').textContent=S.tienda?(S.tienda+' · '+(t?t.nombre:'')+' · '+fechaTxt(S.fecha)+(cs.length?' · '+cs.length+' horas cargadas':' · sin horas cargadas')):'Elige una tienda para ver qué horas faltan.';
+  if(!S.tienda){det.textContent='Toca una hora para ver el detalle.';return}
+  var min=8,max=20;cs.forEach(function(x){var a=horaInicio(x.horario);if(a!==null){if(a<min)min=a;if(a+1>max)max=a+1}});
+  for(var hh=min;hh<max;hh++){(function(hh){
+    var x=cs.filter(function(k){return horaInicio(k.horario)===hh})[0];
+    c.appendChild(h('button',{class:'slot'+(x?' ok':'')+(S.slot===hh?' cur':''),'aria-label':horaTxt(hh)+(x?': cargada, '+x.prods+' productos':': falta por cargar'),onclick:function(){S.slot=hh;pintaSlots()}},[h('b',{text:horaTxt(hh)}),h('span',{text:x?x.prods+' prod.':'falta'})]));
+  })(hh)}
+  det.innerHTML='';
+  if(S.slot===null)det.textContent='Toca una hora para ver el detalle.';
+  else{var x=cs.filter(function(k){return horaInicio(k.horario)===S.slot})[0];
+    det.appendChild(document.createTextNode(horaTxt(S.slot)+' a '+horaTxt((S.slot+1)%24)+': '+(x?x.prods+' productos y '+x.visitas+' visitas ya cargados.':'todavía no se ha cargado. Pega su mensaje a la izquierda.')));
+    if(x){det.appendChild(document.createElement('br'));
+      if(String(x.id).indexOf('WA-')===0)det.appendChild(h('button',{class:'lnk',text:'Editar esta hora',onclick:function(){editarHora(x.id)}}));
+      else det.appendChild(h('span',{class:'hint',text:'Viene de Kobo: no se edita aquí.'}));}
+  }
+}
+function pintaRecientes(){
+  var f=$('filtros');f.innerHTML='';[{id:'todas',n:'Todas'}].concat(EMP.map(function(e){return{id:e.id,n:e.n}})).forEach(function(o){f.appendChild(h('button',{class:S.filtro===o.id?'on':'','aria-pressed':S.filtro===o.id?'true':'false',text:o.n,onclick:function(){S.filtro=o.id;pintaRecientes()}}))});
+  var r=$('recientes');r.innerHTML='';
+  var l=S.cargas.filter(function(c){return S.filtro==='todas'||c.empresa===S.filtro}).slice(0,7);
+  if(!l.length)r.appendChild(h('p',{class:'hint',text:'Todavía no hay horas cargadas.'}));
+  l.forEach(function(c){var t=tiendaObj(c.codigo);r.appendChild(h('button',{class:'rec',onclick:function(){S.empresa=c.empresa;S.tienda=c.codigo;S.fecha=isoFecha(c.fecha);$('fecha').value=S.fecha;S.slot=horaInicio(c.horario);S.busca='';$('busca').value='';pinta()}},[
+    h('span',{class:'a'},[h('b',{text:horarioTxt(c.horario)}),h('span',{text:c.codigo+' '+(t?t.nombre:c.tienda)+' · '+fechaTxt(c.fecha)})]),
+    h('span',{class:'b'},[h('b',{text:c.prods+' prod.'}),h('span',{text:(c.visitas||'—')+' visitas'})])]))});
+}
+function pinta(){pintaEmpresas();pintaTiendas();pintaSlots();pintaRecientes()}
+
+/* ---------- vista previa ---------- */
+function aviso(el,cls,txt){el.innerHTML='';if(txt)el.appendChild(h('div',{class:'banner '+cls,text:txt}))}
+function analizar(){
+  var msg=$('msg').value;if(!S.tienda){return alert('Elige una tienda de la lista.')}
+  var b=$('btn-analizar');b.disabled=true;b.textContent='Analizando…';
+  api('/api/cargar/analizar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({codigo:S.tienda,fecha:S.fecha,mensaje:msg})}).then(function(j){
+    b.disabled=false;b.textContent='Analizar mensaje';
+    if(!j.success){S.analisis=null;var p=$('preview');p.style.display='';p.innerHTML='';p.appendChild(h('div',{class:'banner err',text:j.error||'No pude analizar el mensaje.'}));return}
+    S.analisis=j;pintaPreview();$('preview').scrollIntoView({behavior:'smooth',block:'start'});
+  }).catch(function(e){b.disabled=false;b.textContent='Analizar mensaje';alert('No hubo conexión con el servidor.')});
+}
+function totalRevisar(){var n=0;S.analisis.bloques.forEach(function(b){if(!b.duplicada)b.filas.forEach(function(f){if(f.estado==='REVISAR')n++})});return n}
+function pintaPreview(){
+  if(S.analisis&&S.analisis.edicion){return pintaEditor()}
+  var p=$('preview');p.style.display='';p.innerHTML='';var A=S.analisis;
+  var rev=totalRevisar();
+  p.appendChild(h('div',{},[h('h2',{text:'Vista previa'}),h('p',{class:'sub',text:A.tienda+' · '+fechaTxt(A.fecha.split('/').reverse().join('-'))+' · '+A.bloques.length+' hora(s). Lo amarillo hay que revisarlo: usa "Cambiar" para elegir el producto correcto.'})]));
+  (A.avisos||[]).forEach(function(a){p.appendChild(h('div',{class:'banner warn',text:a}))});
+  A.bloques.forEach(function(b,bi){
+    var nProd=b.filas.reduce(function(s,f){return s+f.cant},0);
+    var blk=h('div',{class:'blk'+(b.duplicada?' dup':'')});
+    blk.appendChild(h('div',{class:'blkh'},[h('b',{text:horarioTxt(b.horario)||'Hora sin leer'}),h('span',{class:'pill',text:(b.visitas!==''?b.visitas+' visitas':'sin visitas')+' · '+(b.sin_ventas?'sin ventas':b.filas.length+' productos ('+nProd+' u.)')})]));
+    (b.avisos||[]).forEach(function(a){blk.appendChild(h('div',{class:'banner warn',text:a}))});
+    if(b.duplicada)blk.appendChild(h('div',{class:'banner warn',text:'Esta hora está repetida más abajo: se guardará la última y ésta se ignora.'}));
+    if(b.filas.length){
+      var tb=h('tbody');
+      b.filas.forEach(function(f){tb.appendChild(filaTabla(f))});
+      blk.appendChild(h('div',{class:'tw'},[h('table',{},[h('thead',{},[h('tr',{},['FACTURA','CANT.','LO QUE ESCRIBIÓ','PRODUCTO EN LA BASE','PRECIO REF.','ESTADO'].map(function(t){return h('th',{text:t})}))]),tb])]));
+    }
+    p.appendChild(blk);
+  });
+  var acc=h('div',{class:'rowf'});
+  var bt=h('button',{class:'btn',text:rev?'Guardar de todos modos ('+rev+' por revisar)':'Confirmar y guardar',onclick:guardar});
+  if(!S.guarda)bt.disabled=true;
+  acc.appendChild(bt);acc.appendChild(h('button',{class:'btn2',text:'Seguir editando',onclick:function(){$('msg').focus()}}));
+  if(!S.guarda)acc.appendChild(h('span',{class:'hint',text:'Modo vista previa: falta conectar la hoja de Google.'}));
+  p.appendChild(acc);p.appendChild(h('div',{id:'res'}));
+}
+function filaTabla(f){
+  var tr=h('tr',{class:f.estado==='REVISAR'?'rev':''});
+  var celProd=h('td',{});celProd.appendChild(h('b',{text:f.producto,style:'font-weight:500'}));
+  celProd.appendChild(h('span',{class:'nota',text:f.nota||''}));
+  var bus=h('div');celProd.appendChild(h('button',{class:'lnk',text:'Cambiar',onclick:function(){abrirBusqueda(f,bus,celProd,tr)}}));celProd.appendChild(bus);
+  tr.appendChild(h('td',{text:'WA'+f.factura}));tr.appendChild(h('td',{text:String(f.cant)}));
+  tr.appendChild(h('td',{text:f.original,style:'color:var(--mut)'}));tr.appendChild(celProd);
+  tr.appendChild(h('td',{text:f.precio?'$'+f.precio:'—'}));
+  tr.appendChild(h('td',{},[h('span',{class:'chip'+(f.estado==='REVISAR'?' rev':''),text:f.estado==='REVISAR'?'Revisar':'OK'})]));
+  return tr;
+}
+function abrirBusqueda(f,cont,celda,tr){
+  cont.innerHTML='';var inp=h('input',{class:'inp',type:'text',placeholder:'Escribe para buscar en la base…','aria-label':'Buscar producto en la base',style:'margin-top:6px;width:100%;max-width:520px'});
+  var lista=h('div',{class:'bus',style:'display:none'});cont.appendChild(inp);cont.appendChild(lista);inp.focus();var t=null;
+  inp.addEventListener('input',function(){clearTimeout(t);var q=inp.value;t=setTimeout(function(){
+    api('/api/cargar/buscar_producto?empresa='+encodeURIComponent(S.analisis.empresa)+'&q='+encodeURIComponent(q)).then(function(j){
+      lista.innerHTML='';var rs=(j.resultados||[]);lista.style.display=rs.length?'':'none';
+      rs.forEach(function(r){lista.appendChild(h('button',{onclick:function(){f.producto=r.producto;f.marca=r.marca||'N/D';f.precio=r.precio;f.estado='OK';f.nota='Elegido a mano';pintaPreview()}},[h('span',{text:r.producto}),h('b',{text:'$'+r.precio,style:'color:var(--ac)'})]))});
+      lista.appendChild(h('button',{onclick:function(){f.producto=inp.value.trim()||f.producto;f.marca=f.marca||'N/D';f.precio=0;f.estado='REVISAR';f.nota='Se guarda tal como lo escribiste';pintaPreview()}},[h('span',{text:'Usar lo que escribí tal cual (no está en la base)'})]));
+      lista.style.display='';
+    })},300)});
+}
+function guardar(){
+  if(S.guardando)return;S.guardando=true;var res=$('res');aviso(res,'ok','Guardando…');
+  api('/api/cargar/guardar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({codigo:S.tienda,fecha:S.fecha,bloques:S.analisis.bloques})}).then(function(j){
+    S.guardando=false;
+    if(!j.success){aviso(res,'err',j.error||'No se pudo guardar.');return}
+    aviso(res,'ok','✔ Guardado: '+j.horas+' hora(s), '+j.filas+' fila(s).'+(j.reemplazadas?' Se reemplazaron '+j.reemplazadas+' fila(s) que ya existían.':''));
+    if(!S.analisis.edicion)$('msg').value='';cargarRecientes();
+  }).catch(function(){S.guardando=false;aviso(res,'err','No hubo conexión con el servidor. No se guardó nada.')});
+}
+function editarHora(id){
+  var p=$('preview');p.style.display='';p.innerHTML='';p.appendChild(h('div',{class:'banner ok',text:'Cargando esa hora…'}));p.scrollIntoView({behavior:'smooth',block:'start'});
+  api('/api/cargar/hora?id='+encodeURIComponent(id)).then(function(j){
+    p.innerHTML='';
+    if(!j.success){p.appendChild(h('div',{class:'banner err',text:j.error||'No pude abrir esa hora.'}));return}
+    S.empresa=j.empresa;S.tienda=j.codigo;S.fecha=isoFecha(j.fecha);$('fecha').value=S.fecha;
+    S.analisis={edicion:true,codigo:j.codigo,empresa:j.empresa,tienda:j.tienda,avisos:[],bloques:[{horario:j.horario,visitas:j.visitas,avisos:[],duplicada:false,sin_ventas:false,id_envio:j.id_envio,filas:j.filas}]};
+    pinta();pintaEditor();
+  }).catch(function(){p.innerHTML='';p.appendChild(h('div',{class:'banner err',text:'No hubo conexión con el servidor.'}))});
+}
+function pintaEditor(){
+  var p=$('preview');p.style.display='';p.innerHTML='';var A=S.analisis,b=A.bloques[0];
+  p.appendChild(h('div',{},[h('h2',{text:'Editar hora cargada'}),h('p',{class:'sub',text:A.tienda+' · '+horarioTxt(b.horario)+' · '+fechaTxt(S.fecha)+'. Cambia cantidades, quita o agrega productos y guarda: esta hora se reemplaza.'})]));
+  p.appendChild(h('div',{class:'rowf'},[h('span',{class:'hint',text:'Visitas'}),h('input',{class:'inp',type:'number',min:'0',value:String(b.visitas===''?'':b.visitas),'aria-label':'Visitas',style:'width:110px',oninput:function(e){b.visitas=e.target.value===''?'':parseInt(e.target.value,10)}})]));
+  var tb=h('tbody');
+  b.filas.forEach(function(f,i){
+    var tr=h('tr',{class:f.estado==='REVISAR'?'rev':''});
+    var celP=h('td',{});celP.appendChild(h('b',{text:f.producto,style:'font-weight:500'}));celP.appendChild(h('span',{class:'nota',text:f.nota||''}));
+    var bus=h('div');celP.appendChild(h('button',{class:'lnk',text:'Cambiar',onclick:function(){abrirBusqueda(f,bus,celP,tr)}}));celP.appendChild(bus);
+    tr.appendChild(h('td',{text:'WA'+f.factura}));
+    tr.appendChild(h('td',{},[h('input',{class:'inp',type:'number',min:'1',value:String(f.cant),'aria-label':'Cantidad',style:'width:80px;padding:8px 10px',oninput:function(e){f.cant=Math.max(1,parseInt(e.target.value,10)||1)}})]));
+    tr.appendChild(celP);tr.appendChild(h('td',{text:f.precio?'$'+f.precio:'—'}));
+    tr.appendChild(h('td',{},[h('button',{class:'lnk',text:'Quitar','aria-label':'Quitar '+f.producto,style:'color:#8a1c1c',onclick:function(){b.filas.splice(i,1);pintaEditor()}})]));
+    tb.appendChild(tr);
+  });
+  if(b.filas.length)p.appendChild(h('div',{class:'tw'},[h('table',{},[h('thead',{},[h('tr',{},['FACTURA','CANT.','PRODUCTO EN LA BASE','PRECIO REF.',''].map(function(t){return h('th',{text:t})}))]),tb])]));
+  else p.appendChild(h('div',{class:'banner warn',text:'No quedan productos. Si guardas así, la hora queda registrada como "sin ventas".'}));
+  var ta=h('textarea',{class:'inp',placeholder:'¿Faltó algo? Escribe una línea por producto. Ej: 2 licuadora oster',style:'min-height:90px','aria-label':'Productos que faltaron'});
+  var msg=h('div');
+  p.appendChild(h('div',{class:'grp'},[h('span',{class:'lbl',text:'AGREGAR LO QUE FALTÓ'}),ta,h('div',{class:'rowf'},[h('button',{class:'btn2',text:'Agregar a la lista',onclick:function(){agregarAlEditor(ta,msg)}}),msg])]));
+  var acc=h('div',{class:'rowf'});
+  var bt=h('button',{class:'btn',text:'Guardar cambios',onclick:guardar});if(!S.guarda)bt.disabled=true;
+  acc.appendChild(bt);
+  acc.appendChild(h('button',{class:'btn2',text:'Cancelar',onclick:function(){S.analisis=null;p.style.display='none'}}));
+  acc.appendChild(h('button',{class:'lnk',text:'Borrar esta hora',style:'color:#8a1c1c;margin-left:auto',onclick:function(){borrarHora(b.id_envio)}}));
+  p.appendChild(acc);p.appendChild(h('div',{id:'res'}));
+}
+function agregarAlEditor(ta,msg){
+  var b=S.analisis.bloques[0];var lineas=ta.value.split('\n').map(function(l){return l.trim()}).filter(Boolean);
+  if(!lineas.length){msg.textContent='Escribe al menos un producto.';return}
+  var hh=horaInicio(b.horario);var cab=horaTxt(hh)+' a '+horaTxt((hh+1)%24);
+  var texto=cab+'\nVisitas: '+(b.visitas===''?0:b.visitas)+'\n'+lineas.map(function(l){return /^\d+\s*[-.)]/.test(l)||/^[-•*]/.test(l)?l:'- '+l}).join('\n');
+  msg.textContent='Buscando en la base…';
+  api('/api/cargar/analizar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({codigo:S.tienda,fecha:S.fecha,mensaje:texto})}).then(function(j){
+    if(!j.success||!j.bloques.length){msg.textContent=j.error||'No pude leer lo que escribiste.';return}
+    var base=b.filas.reduce(function(m,f){return Math.max(m,f.factura)},0);
+    j.bloques[0].filas.forEach(function(f){f.factura=base+f.factura;b.filas.push(f)});
+    pintaEditor();
+  }).catch(function(){msg.textContent='No hubo conexión con el servidor.'});
+}
+function borrarHora(id){
+  if(!confirm('¿Borrar esta hora completa? Se quitan todos sus productos de la hoja.'))return;
+  var res=$('res');aviso(res,'ok','Borrando…');
+  api('/api/cargar/borrar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id})}).then(function(j){
+    if(!j.success){aviso(res,'err',j.error||'No se pudo borrar.');return}
+    S.analisis=null;$('preview').style.display='none';S.slot=null;cargarRecientes();
+  }).catch(function(){aviso(res,'err','No hubo conexión con el servidor.')});
+}
+function cargarRecientes(){api('/api/cargar/recientes').then(function(j){if(j.success){S.cargas=j.cargas;pintaSlots();pintaRecientes()}})}
+
+/* ---------- arranque ---------- */
+$('fecha').value=S.fecha;
+$('fecha').addEventListener('input',function(e){S.fecha=e.target.value;S.slot=null;pintaSlots()});
+$('busca').addEventListener('input',function(e){S.busca=e.target.value;pintaTiendas()});
+$('btn-analizar').addEventListener('click',analizar);
+$('btn-limpiar').addEventListener('click',function(){$('msg').value='';S.analisis=null;$('preview').style.display='none'});
+api('/api/cargar/config').then(function(j){
+  if(!j.success){location.href='/login';return}
+  S.tiendas=j.tiendas;S.guarda=j.guarda;
+  if(!j.guarda)aviso($('aviso-config'),'warn','Modo vista previa: todavía no está conectada la hoja de Google, así que puedes analizar mensajes pero no guardarlos.');
+  pinta();cargarRecientes();
+});
+})();
+</script>
+</body>
+</html>

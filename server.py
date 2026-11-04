@@ -4197,6 +4197,10 @@ def sync_database():
         app.logger.error("Exception in sync_database", exc_info=True)
         return jsonify({'success': False, 'error': f"Error de conexión con Google Sheets: {str(e)}"}), 400
 
+# --- Cargador de mensajes de WhatsApp (página /cargar) ---
+from cargador import init_cargador
+init_cargador(app, globals())
+
 if __name__ == '__main__':
     # FIX SEGURIDAD: debug=True fijo exponía el debugger interactivo de Werkzeug
     # (ejecución arbitraria de código en el navegador) si este archivo se corre
