@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: proyecciones-ventas
+    runtime: static
+    staticPublishPath: .
+    buildCommand: ""
+    headers:
+      - path: /*
+        name: Cache-Control
+        value: no-cache

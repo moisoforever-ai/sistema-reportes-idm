@@ -1,168 +1,249 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sistema de Reportes · IDM</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Proyecciones de ventas</title>
+<link rel="icon" href="logo-idm.png">
+<link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <div class="container">
-        <div class="glass-card">
-            <div class="toolbar">
-                <div class="toolbar-brand">
-                    <img src="/idm_logo.png" alt="IDM" class="brand-logo">
-                    <div class="brand-sep"></div>
-                    <div class="toolbar-brand-text">
-                        <h1>SISTEMA DE REPORTES</h1>
-                    </div>
-                </div>
-                <div class="toolbar-actions">
-                    <a href="/cargar" class="btn-chip btn-primary-chip" title="Cargar mensajes de WhatsApp">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-                        <span>Cargar mensajes</span>
-                    </a>
-                    <button id="sync-btn" class="btn-chip btn-sync" title="Sincronizar con Google Sheets">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
-                        <span class="sync-text">Sincronizar</span>
-                    </button>
-                    {% if session.get('user') == 'admin' %}
-                    <a href="/admin/users" class="btn-chip btn-admin-link" title="Administrar Usuarios">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-                        <span>Administrar</span>
-                    </a>
-                    <a href="/admin/parametros" class="btn-chip btn-admin-link" title="Parámetros de Proyección">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 12l3-3 3 3 5-5"/></svg>
-                        <span>Parámetros</span>
-                    </a>
-                    <a href="/admin/exportar_catalogo_kobo" class="btn-chip btn-admin-link" title="Descargar catálogo actualizado para el selector de productos de Kobo">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                        <span>Catálogo Kobo</span>
-                    </a>
-                    <a href="/admin/exportar_marcas_kobo" class="btn-chip btn-admin-link" title="Descargar lista de marcas actualizada para el selector de Kobo">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41 11 3.83A2 2 0 0 0 9.59 3.24L4 3a1 1 0 0 0-1 1l.24 5.59a2 2 0 0 0 .59 1.41l9.58 9.59a2 2 0 0 0 2.83 0l4.35-4.35a2 2 0 0 0 0-2.83Z"/><circle cx="7.5" cy="7.5" r="1.5" fill="currentColor" stroke="none"/></svg>
-                        <span>Marcas Kobo</span>
-                    </a>
-                    {% endif %}
-                    <a href="/logout" class="btn-chip btn-logout" title="Cerrar sesión">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-                        <span>Salir</span>
-                    </a>
-                </div>
-            </div>
+<header class="top">
+  <div class="top-in">
+    <div class="brand">
+      <img class="logo" src="logo-idm.png" alt="IDM" width="177" height="54">
+      <div class="brand-t">
+        <h1>Proyecciones de ventas</h1>
+        <p id="status" class="status">Sin datos cargados</p>
+      </div>
+    </div>
+    <div class="top-actions">
+      <button id="btnSync" class="btn primary" type="button" hidden>Actualizar datos</button>
+    </div>
+  </div>
+  <nav class="tabs" role="tablist" aria-label="Secciones">
+    <button role="tab" class="tab" data-tab="resumen" aria-selected="true">Resumen</button>
+    <button role="tab" class="tab" data-tab="sedes" aria-selected="false">Sedes y %</button>
+    <button role="tab" class="tab" data-tab="calidad" aria-selected="false">Calidad de datos</button>
+    <button role="tab" class="tab" data-tab="conversor" aria-selected="false">Convertidor Excel a JSON</button>
+    <button role="tab" class="tab" data-tab="reporte" aria-selected="false">Reporte</button>
+    <button role="tab" class="tab" data-tab="datos" aria-selected="false">Datos</button>
+  </nav>
+</header>
 
+<main>
+  <div id="msg" class="msg" role="status" hidden></div>
 
-            <main>
-                <div id="loader-initial" class="initial-loader">
-                    <div class="spinner"></div>
-                    <p id="loader-initial-text">Cargando parámetros desde Google Sheets…</p>
-                </div>
+  <!-- RESUMEN -->
+  <section id="tab-resumen" class="panel">
+    <div id="empty" class="drop" hidden>
+      <p class="drop-t">Aún no hay datos cargados</p>
+      <p class="drop-s">Ve a la pestaña <b>Datos</b> para conectar con la hoja de Google o cargar el consolidado a mano. También puedes arrastrar aquí el consolidado del portal (.xlsx).</p>
+      <p style="margin-top:14px"><button type="button" class="btn primary" id="btnGoDatos">Ir a Datos</button></p>
+    </div>
 
-                <!-- Fix UX: antes, si /api/options fallaba (Google Sheets caído, red
-                     lenta), el spinner de arriba quedaba girando para siempre y el
-                     único aviso era un toast que desaparecía solo en 4 segundos, sin
-                     forma de reintentar sin recargar la página entera. -->
-                <div id="loader-error" class="initial-loader hidden">
-                    <p>No se pudieron cargar los parámetros desde Google Sheets.</p>
-                    <button type="button" id="retry-options-btn" class="btn-submit" style="width: auto; padding: 10px 24px;">
-                        <span class="btn-text">Reintentar</span>
-                    </button>
-                </div>
-
-                <form id="report-form" class="hidden">
-                    <div class="form-grid">
-                        <div class="form-group">
-                            <label for="mes">Mes del estudio</label>
-                            <select id="mes" name="mes" required>
-                                <option value="" disabled selected>Seleccione un mes</option>
-                            </select>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="fecha">Día / fecha</label>
-                            <select id="fecha" name="fecha" required disabled>
-                                <option value="" disabled selected>Seleccione el mes primero</option>
-                            </select>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="empresa">Empresa</label>
-                            <select id="empresa" name="empresa" required>
-                                <option value="" disabled selected>Seleccione una empresa</option>
-                            </select>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="sucursal">Sucursal / sede</label>
-                            <select id="sucursal" name="sucursal" required disabled>
-                                <option value="" disabled selected>Seleccione la empresa primero</option>
-                            </select>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="hora_apertura">Hora de apertura del local</label>
-                            <div class="time-selector-container">
-                                <input type="time" id="hora_apertura" name="hora_apertura" value="09:00" required>
-                                <span class="time-hint">La proyección de la mañana inicia desde esta hora.</span>
-                            </div>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="hora_cierre">Hora de cierre del local</label>
-                            <div class="time-selector-container">
-                                <input type="time" id="hora_cierre" name="hora_cierre" value="19:00" required>
-                                <span class="time-hint">El reporte filtra registros hasta este horario.</span>
-                            </div>
-                            <!-- Fix UX: antes no había validación de que la hora de
-                                 cierre fuera posterior a la de apertura; el reporte
-                                 se generaba igual pero con la proyección en 0%,
-                                 silenciosamente incorrecta. -->
-                            <span id="horario-error" class="time-hint hidden" style="color: var(--negative);">La hora de cierre debe ser posterior a la de apertura.</span>
-                        </div>
-                    </div>
-
-                    <div class="info-banner">
-                        <div class="banner-icon">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-                        </div>
-                        <div class="banner-text">
-                            <strong>Cálculo de proyecciones activo.</strong> Se aplicará la proyección horaria automática según los tiempos de apertura y cierre del local.
-                        </div>
-                    </div>
-
-                    <div class="button-group">
-                        <button type="submit" id="submit-btn" class="btn-submit">
-                            <span class="btn-text">Generar reporte (Excel)</span>
-                            <div class="btn-loader hidden">
-                                <div class="small-spinner"></div>
-                                <span>Procesando…</span>
-                            </div>
-                        </button>
-                        <button type="button" id="obs-btn" class="btn-secondary">
-                            <span class="btn-text">Generar observaciones (TXT)</span>
-                            <div class="btn-loader hidden">
-                                <div class="small-spinner"></div>
-                                <span>Procesando…</span>
-                            </div>
-                        </button>
-                    </div>
-                </form>
-            </main>
-
-            <footer>
-                © 2026 Departamento de IDM · v7.0
-            </footer>
+    <div id="dash" hidden>
+      <div class="filters">
+        <div class="f">
+          <label for="selMes">Mes</label>
+          <select id="selMes"></select>
         </div>
+        <div class="f">
+          <span class="lab" id="lblMetric">Medida</span>
+          <div class="seg" role="radiogroup" aria-labelledby="lblMetric" id="segMetric"></div>
+        </div>
+        <div class="f grow">
+          <span class="lab" id="lblEmp">Empresas</span>
+          <div class="chips" id="chipsEmp" role="group" aria-labelledby="lblEmp"></div>
+        </div>
+      </div>
+
+      <div class="kpis" id="kpis"></div>
+
+      <div id="pies" class="pies"></div>
+
+      <div class="card">
+        <h3 id="tChartTrend">Por mes</h3>
+        <div class="cv"><canvas id="chartTrend" role="img" aria-label="Proyección por mes y empresa"></canvas></div>
+      </div>
+
+      <div id="topProd"></div>
+
+      <div class="card">
+        <div class="card-h">
+          <h3 id="tTable">Detalle por sede</h3>
+          <div class="card-tools">
+            <input id="search" type="search" placeholder="Buscar sede" aria-label="Buscar sede">
+            <button id="btnCsv" class="btn" type="button">Exportar tabla (CSV)</button>
+          </div>
+        </div>
+        <div class="tbl-wrap">
+          <table id="tbl" class="tbl">
+            <thead></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SEDES -->
+  <section id="tab-sedes" class="panel" hidden>
+    <div class="card">
+      <div class="card-h">
+        <h3>% de proyección por sede</h3>
+        <div class="card-tools">
+          <input id="searchSedes" type="search" placeholder="Buscar sede" aria-label="Buscar sede">
+          <button id="btnPctExport" class="btn" type="button">Exportar % (JSON)</button>
+          <label class="btn" for="filePct">Importar % (JSON)</label>
+          <input id="filePct" type="file" accept=".json" hidden>
+          <button id="btnPctReset" class="btn" type="button">Restaurar valores del Excel anterior</button>
+        </div>
+      </div>
+      <p class="hint">El % multiplica la suma de lo observado en los días estudiados. Para una sede nueva, escribe su % aquí. Los cambios se guardan en este navegador.</p>
+      <div class="f inline">
+        <label for="defPct">% para sedes sin asignar</label>
+        <input id="defPct" type="number" min="0" max="500" step="1" value="0"> <span class="unit">%</span>
+        <span id="defPctInfo" class="hint"></span>
+      </div>
+      <div class="tbl-wrap">
+        <table id="tblSedes" class="tbl">
+          <thead><tr><th>Empresa</th><th>Sede en el portal</th><th class="num">% de proyección</th><th>Origen</th><th class="num">Días estudiados</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- CALIDAD -->
+  <section id="tab-calidad" class="panel" hidden>
+    <div id="calidadBody"></div>
+  </section>
+
+  <!-- CONVERSOR -->
+  <section id="tab-conversor" class="panel" hidden>
+    <div class="card">
+      <h3>Convertir un Excel o CSV a JSON</h3>
+      <p class="hint">Sirve para cualquier archivo, por ejemplo el del scraping. Elige el archivo, la hoja y las opciones; luego descarga el JSON.</p>
+      <div class="conv-opts">
+        <div>
+          <label class="btn primary" for="fileConv">Elegir archivo</label>
+          <input id="fileConv" type="file" accept=".xlsx,.xls,.csv" hidden>
+          <span id="convName" class="hint"></span>
+        </div>
+        <div class="f"><label for="convSheet">Hoja</label><select id="convSheet" disabled></select></div>
+        <label class="chk"><input type="checkbox" id="optHeader" checked> La primera fila son los encabezados</label>
+        <label class="chk"><input type="checkbox" id="optDates" checked> Convertir fechas a AAAA-MM-DD</label>
+        <label class="chk"><input type="checkbox" id="optTrim" checked> Quitar espacios sobrantes</label>
+      </div>
+      <div id="convOut" hidden>
+        <p id="convInfo" class="hint"></p>
+        <div class="card-tools">
+          <button id="btnConvDl" class="btn primary" type="button">Descargar .json</button>
+          <button id="btnConvCopy" class="btn" type="button">Copiar JSON</button>
+        </div>
+        <h4>Vista previa de la tabla</h4>
+        <div class="tbl-wrap"><table id="convTbl" class="tbl"><thead></thead><tbody></tbody></table></div>
+        <h4>Vista previa del JSON</h4>
+        <pre id="convJson" class="json" tabindex="0"></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- DATOS -->
+  <section id="tab-datos" class="panel" hidden>
+    <div class="card">
+      <h3>Conexión con Google Sheets</h3>
+      <p class="hint">Los datos se leen de la hoja de cálculo del proyecto: el scraping llena la pestaña DETALLE, el consolidado se pega en CONSOLIDADO y los % de las sedes se guardan en PORCENTAJES. Todos los usuarios con la clave ven lo mismo.</p>
+      <div class="conn-grid">
+        <div class="f" id="fUrl"><label for="connUrl">Dirección del puente</label><input type="text" id="connUrl" placeholder="https://script.google.com/macros/s/.../exec" autocomplete="off"></div>
+        <div class="f"><label for="connKey">Clave de acceso</label><input type="password" id="connKey" autocomplete="off"></div>
+      </div>
+      <div class="card-tools">
+        <button id="btnConnect" class="btn primary" type="button">Conectar y actualizar</button>
+        <button id="btnDisconnect" class="btn" type="button" hidden>Desconectar</button>
+      </div>
+      <p id="connStatus" class="hint" role="status"></p>
+    </div>
+    <div class="card">
+      <h3>Carga manual (respaldo)</h3>
+      <p class="hint">Sirve si no hay conexión. Con la conexión activa, la próxima actualización reemplaza lo cargado a mano.</p>
+      <div class="card-tools">
+        <label class="btn" for="fileMain">Cargar consolidado del portal</label>
+        <input id="fileMain" type="file" accept=".xlsx,.xls,.csv" hidden>
+        <label class="btn" for="fileDet">Cargar detalle de productos</label>
+        <input id="fileDet" type="file" accept=".xlsx,.xls,.csv,.json" hidden>
+        <button id="btnClear" class="btn" type="button" hidden>Borrar datos</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- REPORTE -->
+  <section id="tab-reporte" class="panel" hidden>
+    <div id="repEmpty" class="card" hidden><p class="hint">Carga primero el consolidado del portal para generar reportes.</p></div>
+    <div id="repBody" hidden>
+      <div class="card">
+        <h3>Generar reporte de proyección</h3>
+        <p class="hint">Elige lo que necesitas. Lo que dejes sin seleccionar se toma completo.</p>
+        <div class="rep-grid">
+          <div class="f"><label for="repDesde">Desde</label><input type="date" id="repDesde"></div>
+          <div class="f"><label for="repHasta">Hasta</label><input type="date" id="repHasta"></div>
+          <div class="f"><label for="repMedida">Medida</label><select id="repMedida"></select></div>
+          <div class="f"><label for="repGrupo">Agrupar por</label><select id="repGrupo"></select></div>
+          <div class="f"><label for="repTop">Filas a mostrar</label><select id="repTop"><option value="0">Todas</option><option value="10">Las 10 primeras</option><option value="20">Las 20 primeras</option><option value="50">Las 50 primeras</option><option value="100">Las 100 primeras</option><option value="200">Las 200 primeras</option></select></div>
+        </div>
+        <div class="f"><span class="lab" id="lblRepEmp">Empresas</span><div class="chips" id="repEmp" role="group" aria-labelledby="lblRepEmp"></div></div>
+        <div class="rep-grid sel">
+          <div class="f"><label for="repEstado">Estados</label><select id="repEstado" multiple size="7"></select></div>
+          <div class="f"><label for="repSede">Sedes</label><select id="repSede" multiple size="7"></select></div>
+          <div class="f"><label for="repCat">Categorías</label><select id="repCat" multiple size="7"></select></div>
+          <div class="f"><label for="repMarca">Marcas</label><select id="repMarca" multiple size="7"></select></div>
+          <div class="f"><label for="repProdQ">Productos o modelos</label><input type="search" id="repProdQ" placeholder="Buscar producto o modelo"><select id="repProd" multiple size="5" aria-label="Productos o modelos"></select></div>
+        </div>
+        <p id="repDetHint" class="hint"></p>
+        <div class="card-tools rep-actions">
+          <button id="btnRepGen" class="btn primary" type="button">Generar reporte</button>
+          <button id="btnRepClear" class="btn" type="button">Limpiar filtros</button>
+          <button id="btnRepXlsx" class="btn" type="button" disabled>Descargar Excel</button>
+          <button id="btnRepPdf" class="btn" type="button" disabled>Descargar PDF</button>
+        </div>
+      </div>
+      <div id="repOut"></div>
     </div>
 
-    <!-- Notification Toast -->
-    <div id="toast" class="toast hidden">
-        <span id="toast-message">Mensaje</span>
+    <div id="infBox" hidden>
+      <div class="card">
+        <h3>Informe de productos (PDF y Excel)</h3>
+        <p class="hint">Genera el informe mensual con el formato de la competencia: portada, general por empresa, tabla por variante (cantidad, precio de referencia y $), gráficas, texto comparado con el mes anterior y porcentaje de marcas. Usa el detalle de productos cargado.</p>
+        <p id="infEmpty" class="hint" hidden>Carga primero el detalle de productos (pestaña Datos o conexión con Google Sheets).</p>
+        <div id="infForm">
+          <div class="rep-grid">
+            <div class="f"><label for="infMes">Mes</label><select id="infMes"></select></div>
+          </div>
+          <div class="f"><span class="lab" id="lblInfEmp">Empresas</span><div class="chips" id="infEmp" role="group" aria-labelledby="lblInfEmp"></div></div>
+          <label class="chip" style="margin-top:10px"><input type="checkbox" id="infImput" checked>Completar variantes no observadas en algunas sedes (como el Excel anterior)</label>
+          <div class="card-tools rep-actions">
+            <button id="btnInfGen" class="btn primary" type="button">Preparar informe</button>
+            <button id="btnInfXlsx" class="btn" type="button" disabled>Descargar Excel</button>
+            <button id="btnInfPdf" class="btn" type="button" disabled>Descargar PDF</button>
+          </div>
+        </div>
+      </div>
+      <div id="infOut"></div>
     </div>
+  </section>
+</main>
 
-    <script src="/static/app.js"></script>
+<script src="xlsx.full.min.js"></script>
+<script src="chart.umd.js"></script>
+<script src="jspdf.umd.min.js"></script>
+<script src="jspdf.plugin.autotable.min.js"></script>
+<script src="logo.js"></script>
+<script src="marcas.js"></script>
+<script src="config.js"></script>
+<script src="defaults.js"></script>
+<script src="app.js"></script>
+<script src="variantes.js"></script>
+<script src="informe.js"></script>
 </body>
 </html>
