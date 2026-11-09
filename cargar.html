@@ -130,6 +130,13 @@ tr.rev{background:var(--warn)}
         <label for="fecha" class="hint">Fecha</label>
         <input id="fecha" class="inp" type="date">
       </div>
+      <div class="rowf">
+        <label for="hora" class="hint">Horario</label>
+        <select id="hora" class="inp"></select>
+        <label for="vis" class="hint">Visitas</label>
+        <input id="vis" class="inp" type="number" min="0" placeholder="Del mensaje" style="width:130px">
+        <span class="hint">Opcional: si lo eliges aquí, manda sobre lo que diga el mensaje.</span>
+      </div>
       <div class="tiendas" id="tiendas"></div>
       <div class="sel" id="sel"></div>
     </div>
@@ -180,7 +187,7 @@ tr.rev{background:var(--warn)}
 <script>
 (function(){
 var EMP=[{id:'ddaka',n:'Daka'},{id:'ddamasco',n:'Damasco'},{id:'mmultimax',n:'Multimax'}];
-var S={empresa:'ddaka',busca:'',tienda:null,fecha:hoy(),tiendas:[],cargas:[],filtro:'todas',slot:null,guarda:false,analisis:null,guardando:false,dias:10,ini:9,fin:19,solo:false,verMas:false};
+var S={empresa:'ddaka',busca:'',tienda:null,fecha:hoy(),tiendas:[],cargas:[],filtro:'todas',slot:null,hora:'',guarda:false,analisis:null,guardando:false,dias:10,ini:9,fin:19,solo:false,verMas:false};
 function $(id){return document.getElementById(id)}
 function h(tag,props,kids){var e=document.createElement(tag);props=props||{};for(var k in props){if(k==='class')e.className=props[k];else if(k==='text')e.textContent=props[k];else if(k.slice(0,2)==='on')e.addEventListener(k.slice(2),props[k]);else if(props[k]!==false&&props[k]!==null)e.setAttribute(k,props[k]===true?'':props[k]);}(kids||[]).forEach(function(c){if(c==null)return;e.appendChild(typeof c==='string'?document.createTextNode(c):c)});return e}
 function hoy(){var d=new Date();return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2)}
@@ -211,7 +218,7 @@ function pintaSlots(){
   var min=8,max=20;cs.forEach(function(x){var a=horaInicio(x.horario);if(a!==null){if(a<min)min=a;if(a+1>max)max=a+1}});
   for(var hh=min;hh<max;hh++){(function(hh){
     var x=cs.filter(function(k){return horaInicio(k.horario)===hh})[0];
-    c.appendChild(h('button',{class:'slot'+(x?' ok':'')+(S.slot===hh?' cur':''),'aria-label':horaTxt(hh)+(x?': cargada, '+x.prods+' productos':': falta por cargar'),onclick:function(){S.slot=hh;pintaSlots()}},[h('b',{text:horaTxt(hh)}),h('span',{text:x?x.prods+' prod.':'falta'})]));
+    c.appendChild(h('button',{class:'slot'+(x?' ok':'')+(S.slot===hh?' cur':''),'aria-label':horaTxt(hh)+(x?': cargada, '+x.prods+' productos':': falta por cargar'),onclick:function(){S.slot=hh;setHora(hh);pintaSlots()}},[h('b',{text:horaTxt(hh)}),h('span',{text:x?x.prods+' prod.':'falta'})]));
   })(hh)}
   det.innerHTML='';
   if(S.slot===null)det.textContent='Toca una hora para ver el detalle.';
@@ -227,7 +234,7 @@ function pintaRecientes(){
   var r=$('recientes');r.innerHTML='';
   var l=S.cargas.filter(function(c){return S.filtro==='todas'||c.empresa===S.filtro}).slice(0,7);
   if(!l.length)r.appendChild(h('p',{class:'hint',text:'Todavía no hay horas cargadas.'}));
-  l.forEach(function(c){var t=tiendaObj(c.codigo);r.appendChild(h('button',{class:'rec',onclick:function(){S.empresa=c.empresa;S.tienda=c.codigo;S.fecha=isoFecha(c.fecha);$('fecha').value=S.fecha;S.slot=horaInicio(c.horario);S.busca='';$('busca').value='';pinta()}},[
+  l.forEach(function(c){var t=tiendaObj(c.codigo);r.appendChild(h('button',{class:'rec',onclick:function(){S.empresa=c.empresa;S.tienda=c.codigo;S.fecha=isoFecha(c.fecha);$('fecha').value=S.fecha;S.slot=horaInicio(c.horario);setHora(S.slot);S.busca='';$('busca').value='';pinta()}},[
     h('span',{class:'a'},[h('b',{text:horarioTxt(c.horario)}),h('span',{text:c.codigo+' '+(t?t.nombre:c.tienda)+' · '+fechaTxt(c.fecha)})]),
     h('span',{class:'b'},[h('b',{text:c.prods+' prod.'}),h('span',{text:(c.visitas||'—')+' visitas'})])]))});
 }
@@ -260,7 +267,7 @@ function pintaFaltantes(){
   if(!L.length){c.appendChild(h('div',{class:'okmsg',text:'✔ Sin horas pendientes en el rango elegido.'}));return}
   (S.verMas?L:L.slice(0,6)).forEach(function(x){
     var chips=h('div',{class:'hc'});x.hue.forEach(function(v){chips.appendChild(h('i',{text:horaTxt(v)}))});x.bor.forEach(function(v){chips.appendChild(h('i',{class:'b',text:horaTxt(v)}))});
-    c.appendChild(h('button',{class:'fr',onclick:function(){var t=tiendaObj(x.codigo);if(t)S.empresa=t.empresa;S.tienda=x.codigo;S.fecha=x.fecha;$('fecha').value=x.fecha;S.slot=(x.hue[0]!==undefined?x.hue[0]:x.bor[0]);S.busca='';$('busca').value='';pinta()}},[
+    c.appendChild(h('button',{class:'fr',onclick:function(){var t=tiendaObj(x.codigo);if(t)S.empresa=t.empresa;S.tienda=x.codigo;S.fecha=x.fecha;$('fecha').value=x.fecha;S.slot=(x.hue[0]!==undefined?x.hue[0]:x.bor[0]);setHora(S.slot);S.busca='';$('busca').value='';pinta()}},[
       h('b',{text:x.codigo+' · '+fechaTxt(x.fecha)}),h('span',{class:'t',text:(tiendaObj(x.codigo)?tiendaObj(x.codigo).nombre:x.tienda)+' · '+x.n+' hora(s) cargadas'}),chips]));
   });
   if(L.length>6)c.appendChild(h('button',{class:'lnk',text:S.verMas?'Ver menos':'Ver las '+L.length,style:'margin-top:8px',onclick:function(){S.verMas=!S.verMas;pintaFaltantes()}}));
@@ -272,7 +279,7 @@ function aviso(el,cls,txt){el.innerHTML='';if(txt)el.appendChild(h('div',{class:
 function analizar(){
   var msg=$('msg').value;if(!S.tienda){return alert('Elige una tienda de la lista.')}
   var b=$('btn-analizar');b.disabled=true;b.textContent='Analizando…';
-  api('/api/cargar/analizar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({codigo:S.tienda,fecha:S.fecha,mensaje:msg})}).then(function(j){
+  api('/api/cargar/analizar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({codigo:S.tienda,fecha:S.fecha,mensaje:msg,hora:S.hora,visitas:$('vis').value})}).then(function(j){
     b.disabled=false;b.textContent='Analizar mensaje';
     if(!j.success){S.analisis=null;var p=$('preview');p.style.display='';p.innerHTML='';p.appendChild(h('div',{class:'banner err',text:j.error||'No pude analizar el mensaje.'}));return}
     S.analisis=j;pintaPreview();$('preview').scrollIntoView({behavior:'smooth',block:'start'});
@@ -333,7 +340,7 @@ function guardar(){
     S.guardando=false;
     if(!j.success){aviso(res,'err',j.error||'No se pudo guardar.');return}
     aviso(res,'ok','✔ Guardado: '+j.horas+' hora(s), '+j.filas+' fila(s).'+(j.reemplazadas?' Se reemplazaron '+j.reemplazadas+' fila(s) que ya existían.':''));
-    if(!S.analisis.edicion)$('msg').value='';cargarRecientes();
+    if(!S.analisis.edicion){$('msg').value='';$('vis').value='';setHora(null)}cargarRecientes();
   }).catch(function(){S.guardando=false;aviso(res,'err','No hubo conexión con el servidor. No se guardó nada.')});
 }
 function editarHora(id){
@@ -396,12 +403,17 @@ function borrarHora(id){
 }
 function cargarRecientes(){api('/api/cargar/recientes?dias=14').then(function(j){if(j.success){S.cargas=j.cargas;pintaSlots();pintaRecientes();pintaFaltantes()}})}
 
+/* ---------- horario y visitas manuales ---------- */
+function setHora(v){S.hora=(v===null||v===undefined)?'':String(v);var e=$('hora');if(e)e.value=S.hora}
+(function(){var e=$('hora');e.appendChild(h('option',{value:'',text:'Del mensaje'}));
+  for(var x=6;x<=22;x++)e.appendChild(h('option',{value:String(x),text:horaTxt(x)+' a '+horaTxt((x+1)%24)}));
+  e.addEventListener('change',function(){S.hora=e.value})})();
 /* ---------- arranque ---------- */
 $('fecha').value=S.fecha;
 $('fecha').addEventListener('input',function(e){S.fecha=e.target.value;S.slot=null;pintaSlots()});
 $('busca').addEventListener('input',function(e){S.busca=e.target.value;pintaTiendas()});
 $('btn-analizar').addEventListener('click',analizar);
-$('btn-limpiar').addEventListener('click',function(){$('msg').value='';S.analisis=null;$('preview').style.display='none'});
+$('btn-limpiar').addEventListener('click',function(){$('msg').value='';$('vis').value='';setHora(null);S.analisis=null;$('preview').style.display='none'});
 api('/api/cargar/config').then(function(j){
   if(!j.success){location.href='/login';return}
   S.tiendas=j.tiendas;S.guarda=j.guarda;

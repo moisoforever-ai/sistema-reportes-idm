@@ -249,6 +249,48 @@ def parsear_mensajes(msg):
     return bloques
 
 
+def horario_de_hora(h24):
+    """8 -> '08_00am_09_00am' (hora de inicio en 24 h)."""
+    h24 = int(h24)
+    def p(x):
+        x %= 24
+        s = "am" if x < 12 else "pm"
+        y = x % 12 or 12
+        return f"{y}:00 {s}"
+    return horario_wa(f"{p(h24)} a {p(h24 + 1)}")
+
+
+def _aplicar_manuales(bloques, hora, visitas, avisos_gen):
+    """Horario y visitas elegidos a mano en la página. Con UN solo bloque mandan sobre lo
+    leído del mensaje; con varios, solo completan los bloques a los que les falta el dato."""
+    try:
+        hor = horario_de_hora(hora) if hora not in (None, '') else ''
+    except Exception:
+        hor = ''
+    try:
+        vis = int(visitas) if visitas not in (None, '') else None
+        if vis is not None and vis < 0:
+            vis = None
+    except Exception:
+        vis = None
+    if not hor and vis is None:
+        return
+    unico = len(bloques) == 1
+    for b in bloques:
+        if hor and (unico or not b['horario']):
+            if b['horario'] and b['horario'] != hor:
+                b['avisos'].append("El mensaje decía otro horario; se usó el que elegiste arriba.")
+            b['horario'] = hor
+            b['avisos'] = [x for x in b['avisos'] if not x.startswith(("No pude leer el horario", "Hay texto antes de la primera hora"))]
+        if vis is not None and (unico or b['visitas'] == ""):
+            if b['visitas'] != "" and b['visitas'] != vis:
+                b['avisos'].append("El mensaje decía otras visitas; se usaron las que escribiste arriba.")
+            b['visitas'] = vis
+            b['avisos'] = [x for x in b['avisos'] if not x.startswith("Falta el número de visitas")]
+    if not unico:
+        avisos_gen.append("Elegiste horario o visitas, pero el mensaje trae varias horas: solo se aplicó a las que no traían ese dato.")
+
+
 # ---------------------------------------------------------------------------
 # GOOGLE SHEETS (cuenta de servicio)
 # ---------------------------------------------------------------------------
@@ -504,6 +546,7 @@ def init_cargador(app, G):
             if not bloques:
                 return jsonify({'success': False, 'error': 'No encontré ninguna hora en el mensaje.'}), 400
             vistos, avisos_gen = {}, []
+            _aplicar_manuales(bloques, d.get('hora'), d.get('visitas'), avisos_gen)
             for i, b in enumerate(bloques):
                 if b['horario'] in vistos:
                     avisos_gen.append(f"La hora {b['horario']} aparece dos veces en lo pegado: se guardará la última.")
