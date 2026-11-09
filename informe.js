@@ -12,9 +12,9 @@
   const usd = (x) => '$' + f0(x);
   const pc = (x) => Math.round(x * 100) + '%';
   const EMP_FIRST = ['DAKA', 'DAMASCO', 'MULTIMAX'];
-  const EMP_COL = { DAKA: [255, 212, 0], DAMASCO: [244, 164, 96], MULTIMAX: [120, 144, 156] };
+  const EMP_COL = { DAKA: [242, 194, 0], DAMASCO: [214, 40, 40], MULTIMAX: [20, 40, 75], 'CIRO SANCHEZ': [154, 160, 166], VENELECTRONICS: [46, 158, 85], 'SOY TECHNO': [255, 255, 255] };
   const empCol = (e) => EMP_COL[e] || [110, 110, 110];
-  const empTxt = (e) => (EMP_COL[e] ? [17, 17, 17] : [255, 255, 255]);
+  const empTxt = (e) => ({ DAKA: [17, 17, 17], 'CIRO SANCHEZ': [17, 17, 17], 'SOY TECHNO': [17, 17, 17] }[e] || [255, 255, 255]);
   const PAL = ['#2f5d9b', '#e8801a', '#9aa0a6', '#f2c200', '#4a8f5b', '#7a5cc4', '#c0392b', '#1aa3b8', '#b5835a', '#5b6770', '#d36ba2', '#8aa832'];
   const GCOL = ['#2f5d9b', '#e8801a', '#f2c200', '#4a8f5b', '#7a5cc4', '#c0392b'];
 
@@ -27,9 +27,16 @@
 
   // ---- motor: proyección por variante, sede y mes (misma fórmula del Excel) ----
   function raw(mes, imput, empSet) {
-    const p = P(); const rows = p.state.detail.rows.filter((r) => r.fecha.slice(0, 7) === mes);
-    const days = p.daysIn(mes); const dates = new Map();
+    const p = P(); const all = p.state.detail.rows.filter((r) => r.fecha.slice(0, 7) === mes);
+    const days = p.daysIn(mes);
+    // días estudiados: los del consolidado (incluye días en que no salió ningún producto); si la sede no está en el consolidado, los días con detalle
+    const study = new Map();
+    (p.state.rows || []).forEach((r) => { if (r.fecha.slice(0, 7) !== mes) return; const k = r.empresa + '||' + r.sede; let s = study.get(k); if (!s) study.set(k, s = new Set()); s.add(r.fecha); });
+    let excl = 0;
+    const rows = all.filter((r) => { const s = study.get(r.empresa + '||' + r.sede); if (s && !s.has(r.fecha)) { excl++; return false; } return true; });
+    const dates = new Map();
     rows.forEach((r) => { const k = r.empresa + '||' + r.sede; let s = dates.get(k); if (!s) dates.set(k, s = new Set()); s.add(r.fecha); });
+    study.forEach((s, k) => { dates.set(k, s); });
     const fac = new Map();
     dates.forEach((s, k) => { const a = k.split('||'); fac.set(k, { n: s.size, f: (1 + p.pctInfo(a[0], a[1]).value) * (days + 1) / (s.size + 1) }); });
     const out = new Map(), unc = new Map(), sedes = new Map(); let sinCat = 0;
@@ -49,13 +56,15 @@
     });
     if (imput) {
       out.forEach((ec, emp) => {
-        const all = Array.from(sedes.get(emp) || []); const N = all.length || 1;
+        // sedes estudiadas del mes de esa empresa (consolidado) + las que aparecen en el detalle
+        const set = new Set(sedes.get(emp) || []); study.forEach((s2, k) => { if (k.split('||')[0] === emp) set.add(k); });
+        const all = Array.from(set); const N = all.length || 1;
         ec.forEach((cv) => cv.forEach((v) => {
           all.forEach((sk) => { if (!(v.sedes.get(sk) > 0)) v.imp += v.pure / N / days * Math.max(0, days - fac.get(sk).n); });
         }));
       });
     }
-    return { out: out, unc: unc, days: days, sinCat: sinCat, nRows: rows.length };
+    return { out: out, unc: unc, days: days, sinCat: sinCat, nRows: rows.length, excl: excl };
   }
 
   const gIdx = (def, g) => Math.max(0, def.groups.indexOf(g));
@@ -88,7 +97,7 @@
       if (cats.length) emps.push({ name: emp, cats: cats });
     });
     emps.sort((a, b) => { const ia = EMP_FIRST.indexOf(a.name), ib = EMP_FIRST.indexOf(b.name); return (ia < 0 ? 9 : ia) - (ib < 0 ? 9 : ib) || a.name.localeCompare(b.name); });
-    const m = { mes: o.mes, prev: hasPrev ? prevM : null, days: r.days, imput: o.imput, emps: emps, unc: r.unc, sinCat: r.sinCat, nRows: r.nRows };
+    const m = { mes: o.mes, prev: hasPrev ? prevM : null, days: r.days, imput: o.imput, emps: emps, unc: r.unc, sinCat: r.sinCat, nRows: r.nRows, excl: r.excl };
     recalc(m);
     emps.forEach((e) => e.cats.forEach((c) => { const k = e.name + '|' + c.id; c.narr = keep.narr[k] != null ? keep.narr[k] : narrative(m, e, c); c.nk = k; }));
     return m;
@@ -250,8 +259,8 @@
     // notas
     doc.addPage(); logo(); title('Notas del informe', 40);
     const notes = ['Mes proyectado: ' + mes + ' (' + model.days + ' días). Datos tomados del detalle de productos cargado (' + f0(model.nRows) + ' filas del mes).',
-      'Fórmula por sede, mes y variante: proyectado = Suma de lo observado x (1 + % de la sede) x (días del mes + 1) / (días estudiados + 1). Los días estudiados son los días distintos del detalle de esa sede en el mes.',
-      model.imput ? 'Variantes no observadas: en las sedes donde una variante existe en otras sedes pero no se observó, se agrega el piso del Excel anterior: total de la variante / número de sedes de la empresa / días del mes x (días del mes − días estudiados).' : 'Variantes no observadas: no se agregó ningún piso; solo se proyecta lo observado.',
+      'Fórmula por sede, mes y variante: proyectado = Suma de lo observado x (1 + % de la sede) x (días del mes + 1) / (días estudiados + 1). Los días estudiados son los días de esa sede en el consolidado (cuentan también los días en que no salió ningún producto, con 0); si la sede no está en el consolidado, se usan los días distintos del detalle.' + (model.excl ? ' Se dejaron fuera ' + f0(model.excl) + ' filas del detalle con fecha que no es día estudiado de su sede.' : ''),
+      model.imput ? 'Variantes no observadas: en las sedes donde una variante existe en otras sedes pero no se observó, se agrega el piso del Excel anterior: TOTAL 2 (suma de los totales proyectados de la variante) / sedes estudiadas de la empresa en el mes = TOTAL 3; TOTAL 3 / días del mes = TOTAL 4; y TOTAL 4 x (días del mes − días estudiados) se asigna a las sedes donde el promedio de la variante es 0.' : 'Variantes no observadas: no se agregó ningún piso; solo se proyecta lo observado.',
       'Precio de referencia: precio promedio ponderado observado por variante y empresa, redondeado a múltiplos de 5, salvo que se haya editado a mano. $ = cantidad proyectada x precio de referencia.',
       model.prev ? 'Comparación contra ' + mLabel(model.prev) + ' calculada con el mismo método y el mismo detalle.' : 'No hay datos del mes anterior en el detalle, por eso la redacción no compara contra otro mes.',
       'Filas del detalle sin clasificar en una variante (no se incluyen): ' + f0(Array.from(model.unc.values()).reduce((a, x) => a + x, 0)) + ' unidades en ' + model.unc.size + ' productos.'];
@@ -298,10 +307,12 @@
     const cur = $('#infMes').value; $('#infMes').innerHTML = ms.slice().reverse().map((m) => '<option value="' + m + '">' + esc(mLabel(m)) + '</option>').join(''); $('#infMes').value = ms.includes(cur) ? cur : ms[ms.length - 1];
     const emps = Array.from(new Set(p.state.detail.rows.map((r) => r.empresa))).sort((a, b) => { const ia = EMP_FIRST.indexOf(a), ib = EMP_FIRST.indexOf(b); return (ia < 0 ? 9 : ia) - (ib < 0 ? 9 : ib) || a.localeCompare(b); });
     const prev = new Set(Array.from(document.querySelectorAll('#infEmp input:checked')).map((i) => i.value)); const had = document.querySelectorAll('#infEmp input').length > 0;
-    $('#infEmp').innerHTML = emps.map((e) => '<label class="chip"><input type="checkbox" value="' + esc(e) + '"' + (!had || prev.has(e) ? ' checked' : '') + '>' + esc(e) + '</label>').join('');
+    $('#infEmp').innerHTML = emps.map((e) => p.empChip(e, !had || prev.has(e))).join(''); infToggle();
   }
+  function infToggle() { $('#infEmp').hidden = ($('input[name=infEmpMode]:checked') || {}).value !== 'algunas'; }
   function prepare() {
-    const empSet = new Set(Array.from(document.querySelectorAll('#infEmp input:checked')).map((i) => i.value));
+    const some = ($('input[name=infEmpMode]:checked') || {}).value === 'algunas';
+    const empSet = new Set(Array.from(document.querySelectorAll(some ? '#infEmp input:checked' : '#infEmp input')).map((i) => i.value));
     if (!empSet.size) return P().showMsg('Elige al menos una empresa.', true);
     keep.narr = {}; model = build({ mes: $('#infMes').value, imput: $('#infImput').checked, empSet: empSet });
     renderPreview();
@@ -328,6 +339,7 @@
   function bind() {
     const box = $('#infBox'); if (!box || box.dataset.b) return; box.dataset.b = '1';
     $('#btnInfGen').addEventListener('click', prepare);
+    document.querySelectorAll('input[name=infEmpMode]').forEach((r) => r.addEventListener('change', infToggle));
     $('#btnInfPdf').addEventListener('click', () => { try { exportPdf(); } catch (e) { console.error(e); P().showMsg('No se pudo generar el PDF: ' + e.message, true); } });
     $('#btnInfXlsx').addEventListener('click', () => { try { exportXlsx(); } catch (e) { console.error(e); P().showMsg('No se pudo generar el Excel: ' + e.message, true); } });
     $('#infOut').addEventListener('change', (ev) => {
