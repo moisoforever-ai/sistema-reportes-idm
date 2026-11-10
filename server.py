@@ -1184,6 +1184,11 @@ def obtener_etiqueta_busqueda(producto_original, marca, categoria, grupos_kw, te
 # sobre qué tipo de match incorrecto SÍ y NO detecta este umbral.
 UMBRAL_CONFIANZA_MATCH = 40
 
+# Puntos que se restan a una lavadora cuyo catálogo es de OTRA marca que la que
+# escribió el freelance. Súbelo (ej. 40) para ser más estricto, bájalo (ej. 10)
+# para ser más flexible, o ponlo en 0 para desactivar esta regla.
+PENALIZACION_MARCA_LAVADORA = 25
+
 def buscar_coincidencia_tecnica(fila, universo_maestro):
     producto_campo = fila['Producto']
     marca_campo = remover_tildes(str(fila['Marca'])).lower().strip() if not pd.isna(fila['Marca']) else ""
@@ -1298,6 +1303,8 @@ def buscar_coincidencia_tecnica(fila, universo_maestro):
                 op_caps = opcion.get('capacidades', [])
                 if op_caps:
                     tolerance = 1.5
+                    if categoria_campo == 'LAVADO':
+                        tolerance = 0.5  # lavadoras: los KG deben coincidir (13 no es 14)
                     if prod_type in ['NEVERA', 'CONGELADOR']:
                         tolerance = 5.0
                     elif prod_type == 'A/A':
@@ -1320,6 +1327,14 @@ def buscar_coincidencia_tecnica(fila, universo_maestro):
                             score -= min(35.0, min_diff_std * 1.5)
                 else:
                     score -= 20
+
+            # Lavadoras: otra marca distinta a la del freelance se penaliza (evita que
+            # una Hyundai 13kg termine como una Daewoo 14kg si falta en el catálogo)
+            if categoria_campo == 'LAVADO' and marca_campo:
+                if opcion.get('marca_grupo') != obtener_grupo_marca(marca_campo) and marca_campo not in opcion['normalizado']:
+                    score -= PENALIZACION_MARCA_LAVADORA
+            if categoria_campo == 'LAVADO' and opcion.get('precio', 0.0) <= 0:
+                score -= 30  # evita elegir una lavadora del catálogo sin precio (N/D)
 
             if score > mejor_puntaje:
                 mejor_puntaje = score
@@ -3563,7 +3578,9 @@ def generate_report():
                 try:
                     fact_val = int(float(fact_val))
                 except Exception:
-                    fact_val = 0
+                    # Facturas de WhatsApp ("WA3") -> 3, para que no salgan como 0
+                    _dig = re.findall(r'\d+', str(fact_val))
+                    fact_val = int(_dig[0]) if _dig else 0
             else:
                 fact_val = 0
             ws2.cell(row=raw_row_idx, column=12, value=fact_val).alignment = Alignment(horizontal="center", vertical="center")
@@ -3715,11 +3732,12 @@ def generate_report():
                 hor, inv = item
                 t1, t2 = parse_horario(hor)
                 t1_val = t1 if t1 is not None else 0.0
+                # Facturas numéricas (Kobo: 1, 2, 3) y de texto (WhatsApp: WA1, WA2) pueden
+                # convivir; el 0/1 evita comparar un número con un texto (TypeError).
                 try:
-                    inv_val = float(inv)
-                except ValueError:
-                    inv_val = str(inv)
-                return (t1_val, inv_val)
+                    return (t1_val, 0, float(inv), '')
+                except (ValueError, TypeError):
+                    return (t1_val, 1, 0.0, str(inv))
             sorted_large_invoices = sorted(list(large_invoices), key=sort_key)
             
             row_idx = 3
