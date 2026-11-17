@@ -3169,13 +3169,15 @@ def generate_report():
             # la Tabla Dinámica (ver "orden_aparicion" donde se arma df_t2, más arriba).
             p_row = pivot_row_start + idx
 
-            if row['ES_PROMO']:
-                desc_formula = f"='Tabla Dinámica'!A{p_row}&\" (PROMO)\""
-            else:
-                desc_formula = f"='Tabla Dinámica'!A{p_row}"
+            # Fórmulas definidas por el cliente (sesión 27). La Tabla Dinámica tiene la
+            # columna ES PROMO (A=producto, B=NO, C=SI, D=Total general; la de ventas está en F):
+            #   C: si la columna SI de ese producto tiene un número -> agrega " (PROMO)"
+            #   E: cantidad total (columna D)   F: venta total (columna F)
+            desc_formula = (f"=IF(ISNUMBER('Tabla Dinámica'!C{p_row}), "
+                            f"'Tabla Dinámica'!A{p_row} & \" (PROMO)\", 'Tabla Dinámica'!A{p_row})")
 
             ws1.cell(row=r_idx, column=3, value=desc_formula).alignment = Alignment(horizontal="center", vertical="center")
-            ws1.cell(row=r_idx, column=5, value=f"='Tabla Dinámica'!B{p_row}").alignment = Alignment(horizontal="center", vertical="center")
+            ws1.cell(row=r_idx, column=5, value=f"='Tabla Dinámica'!D{p_row}").alignment = Alignment(horizontal="center", vertical="center")
             ws1.cell(row=r_idx, column=6, value=f"='Tabla Dinámica'!F{p_row}").number_format = '$#,##0'
             ws1.cell(row=r_idx, column=6).alignment = Alignment(horizontal="center", vertical="center")
             ws1.cell(row=r_idx, column=4, value=f"=IF(E{r_idx}=0, 0, ROUND(F{r_idx}/E{r_idx}, 2))").number_format = '$#,##0.00'
@@ -3682,6 +3684,7 @@ def generate_report():
                 destination="A3",
                 name="PivotCantidad",
                 row="Producto Estandarizado",
+                column="Es Promo",
                 value="Cantidad",
             )
             ws_pivot.add_pivot_table(
