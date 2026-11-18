@@ -937,7 +937,7 @@ def is_own_brand(marca_db, empresa):
         # propia de Damasco (antes solo lo era cuando venía como "DA+CO | MIDEA").
         own_brands = ['DA+CO', 'DACO', 'DAMASCO', 'VENELECTR', 'SYON', 'MIDEA']
     elif 'multimax' in emp:
-        own_brands = ['CLX', 'CONDESA', 'FRIGILUX', 'MILATTI', 'KUCCE', 'VETRUX', 'ITOK', 'MUNDO BLANCO']
+        own_brands = ['CLX', 'CONDESA', 'FRIGILUX', 'REINITA', 'MILATTI', 'KUCCE', 'VETRUX', 'ITOK', 'MUNDO BLANCO']
     else:
         own_brands = []
         
@@ -948,7 +948,7 @@ def obtener_grupo_marca(marca):
     m = m.replace("+", "").replace(" ", "").replace("-", "")
     if any(k in m for k in ['damasco', 'daco']):
         return 'damasco'
-    if any(k in m for k in ['multimax', 'clx', 'condesa', 'frigilux', 'milatti', 'kucce', 'vetrux', 'mundoblanco']):
+    if any(k in m for k in ['multimax', 'clx', 'reinita', 'condesa', 'frigilux', 'milatti', 'kucce', 'vetrux', 'mundoblanco']):
         return 'multimax'
     if 'daka' in m:
         return 'daka'
