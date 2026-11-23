@@ -335,7 +335,7 @@ function pintaPreview(){
     if(b.filas.length){
       var tb=h('tbody');
       b.filas.forEach(function(f){tb.appendChild(filaTabla(f))});
-      blk.appendChild(h('div',{class:'tw'},[h('table',{},[h('thead',{},[h('tr',{},['FACTURA','CANT.','LO QUE ESCRIBIÓ','PRODUCTO EN LA BASE','PRECIO REF.','ESTADO'].map(function(t){return h('th',{text:t})}))]),tb])]));
+      blk.appendChild(h('div',{class:'tw'},[h('table',{},[h('thead',{},[h('tr',{},['FACTURA','CANT.','LO QUE ESCRIBIÓ','PRODUCTO EN LA BASE','PRECIO ($)','ESTADO'].map(function(t){return h('th',{text:t})}))]),tb])]));
     }
     p.appendChild(blk);
   });
@@ -353,10 +353,11 @@ function filaTabla(f){
   var bus=h('div');celProd.appendChild(h('button',{class:'lnk',text:'Cambiar',onclick:function(){abrirBusqueda(f,bus,celProd,tr)}}));celProd.appendChild(bus);
   tr.appendChild(h('td',{text:'WA'+f.factura}));tr.appendChild(h('td',{text:String(f.cant)}));
   tr.appendChild(h('td',{text:f.original,style:'color:var(--mut)'}));tr.appendChild(celProd);
-  tr.appendChild(h('td',{text:f.precio?'$'+f.precio:'—'}));
+  tr.appendChild(celdaPrecio(f));
   tr.appendChild(h('td',{},[h('span',{class:'chip'+(f.estado==='REVISAR'?' rev':''),text:f.estado==='REVISAR'?'Revisar':'OK'})]));
   return tr;
 }
+function celdaPrecio(f){return h('td',{},[h('input',{class:'inp',type:'number',min:'0',step:'0.01',value:String(f.precio||''),placeholder:'0','aria-label':'Precio',title:'Puedes corregir el precio de esta línea',style:'width:92px;padding:8px 10px',oninput:function(e){var v=parseFloat(String(e.target.value).replace(',','.'));f.precio=isNaN(v)||v<0?0:v;if(f.precio>0&&f.estado==='REVISAR'){f.nota=(f.nota||'')+' · precio puesto a mano'}}})])}
 function abrirBusqueda(f,cont,celda,tr){
   cont.innerHTML='';var inp=h('input',{class:'inp',type:'text',placeholder:'Escribe para buscar en la base…','aria-label':'Buscar producto en la base',style:'margin-top:6px;width:100%;max-width:520px'});
   var lista=h('div',{class:'bus',style:'display:none'});cont.appendChild(inp);cont.appendChild(lista);inp.focus();var t=null;
@@ -398,11 +399,11 @@ function pintaEditor(){
     var bus=h('div');celP.appendChild(h('button',{class:'lnk',text:'Cambiar',onclick:function(){abrirBusqueda(f,bus,celP,tr)}}));celP.appendChild(bus);
     tr.appendChild(h('td',{text:'WA'+f.factura}));
     tr.appendChild(h('td',{},[h('input',{class:'inp',type:'number',min:'1',value:String(f.cant),'aria-label':'Cantidad',style:'width:80px;padding:8px 10px',oninput:function(e){f.cant=Math.max(1,parseInt(e.target.value,10)||1)}})]));
-    tr.appendChild(celP);tr.appendChild(h('td',{text:f.precio?'$'+f.precio:'—'}));
+    tr.appendChild(celP);tr.appendChild(celdaPrecio(f));
     tr.appendChild(h('td',{},[h('button',{class:'lnk',text:'Quitar','aria-label':'Quitar '+f.producto,style:'color:#ffb4ab',onclick:function(){b.filas.splice(i,1);pintaEditor()}})]));
     tb.appendChild(tr);
   });
-  if(b.filas.length)p.appendChild(h('div',{class:'tw'},[h('table',{},[h('thead',{},[h('tr',{},['FACTURA','CANT.','PRODUCTO EN LA BASE','PRECIO REF.',''].map(function(t){return h('th',{text:t})}))]),tb])]));
+  if(b.filas.length)p.appendChild(h('div',{class:'tw'},[h('table',{},[h('thead',{},[h('tr',{},['FACTURA','CANT.','PRODUCTO EN LA BASE','PRECIO ($)',''].map(function(t){return h('th',{text:t})}))]),tb])]));
   else p.appendChild(h('div',{class:'banner warn',text:'No quedan productos. Si guardas así, la hora queda registrada como "sin ventas".'}));
   var ta=h('textarea',{class:'inp',placeholder:'¿Faltó algo? Escribe una línea por producto. Ej: 2 licuadora oster',style:'min-height:90px','aria-label':'Productos que faltaron'});
   var msg=h('div');
