@@ -6,7 +6,7 @@
     <title>Sistema de Reportes · IDM</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
@@ -17,6 +17,7 @@
                     <img src="/idm_logo.png" alt="IDM" class="brand-logo">
                     <div class="brand-sep"></div>
                     <div class="toolbar-brand-text">
+                        <span class="toolbar-brand-eyebrow">DEPARTAMENTO IDM</span>
                         <h1>SISTEMA DE REPORTES</h1>
                     </div>
                 </div>
@@ -56,6 +57,17 @@
 
 
             <main>
+                <section class="hero reveal">
+                    <div class="hero-eyebrow">// REPORTE POR TIENDA</div>
+                    <h2>Un día, una tienda,<br><em>un reporte.</em></h2>
+                    <p>Elige el mes, el día y la sucursal. El sistema toma los datos cargados y te arma el Excel listo para entregar.</p>
+                    <div class="steps" id="steps">
+                        <div class="step" data-step="1"><b>01 · ESTUDIO</b>Mes y día</div>
+                        <div class="step" data-step="2"><b>02 · TIENDA</b>Empresa y sucursal</div>
+                        <div class="step" data-step="3"><b>03 · HORARIO</b>Apertura y cierre</div>
+                        <div class="step" data-step="4"><b>04 · LISTO</b>Generar reporte</div>
+                    </div>
+                </section>
                 <div id="loader-initial" class="initial-loader">
                     <div class="spinner"></div>
                     <p id="loader-initial-text">Cargando parámetros desde Google Sheets…</p>
@@ -73,7 +85,9 @@
                 </div>
 
                 <form id="report-form" class="hidden">
-                    <div class="form-grid">
+                    <div class="section-label reveal"><span>01</span> MES Y DÍA DEL ESTUDIO</div>
+                    <p class="section-help">Primero el mes; el día se habilita solo.</p>
+                    <div class="form-grid reveal">
                         <div class="form-group">
                             <label for="mes">Mes del estudio</label>
                             <select id="mes" name="mes" required>
@@ -88,6 +102,10 @@
                             </select>
                         </div>
 
+                    </div>
+                    <div class="section-label reveal"><span>02</span> EMPRESA Y SUCURSAL</div>
+                    <p class="section-help">Elige la empresa y luego la sede exacta.</p>
+                    <div class="form-grid reveal">
                         <div class="form-group">
                             <label for="empresa">Empresa</label>
                             <select id="empresa" name="empresa" required>
@@ -102,6 +120,10 @@
                             </select>
                         </div>
 
+                    </div>
+                    <div class="section-label reveal"><span>03</span> HORARIO DEL LOCAL</div>
+                    <p class="section-help">Se usa para proyectar las ventas del día completo.</p>
+                    <div class="form-grid reveal">
                         <div class="form-group">
                             <label for="hora_apertura">Hora de apertura del local</label>
                             <div class="time-selector-container">
@@ -124,7 +146,8 @@
                         </div>
                     </div>
 
-                    <div class="info-banner">
+                    <div class="section-label reveal"><span>04</span> GENERAR</div>
+                    <div class="info-banner reveal">
                         <div class="banner-icon">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
                         </div>
@@ -133,7 +156,7 @@
                         </div>
                     </div>
 
-                    <div class="button-group">
+                    <div class="button-group reveal">
                         <button type="submit" id="submit-btn" class="btn-submit">
                             <span class="btn-text">Generar reporte (Excel)</span>
                             <div class="btn-loader hidden">
@@ -164,5 +187,31 @@
     </div>
 
     <script src="/static/app.js"></script>
+    <script>
+    /* Pasos que se encienden según lo que ya elegiste + aparición suave al bajar */
+    (function(){
+      var $=function(i){return document.getElementById(i)};
+      function upd(){
+        var f=[($('mes').value&&$('fecha').value),($('empresa').value&&$('sucursal').value),
+               ($('hora_apertura').value&&$('hora_cierre').value&&$('hora_cierre').value>$('hora_apertura').value)];
+        var ok=f.map(Boolean), all=ok[0]&&ok[1]&&ok[2], cur=ok.indexOf(false);
+        document.querySelectorAll('#steps .step').forEach(function(el,i){
+          var done=i<3?ok[i]:all;
+          el.classList.toggle('done',!!done);
+          el.classList.toggle('now',!done&&(i===cur||(i===3&&cur===-1)));
+        });
+        var b=$('submit-btn'); if(b) b.classList.toggle('ready',!!all);
+      }
+      ['mes','fecha','empresa','sucursal','hora_apertura','hora_cierre'].forEach(function(i){
+        var e=$(i); if(e){e.addEventListener('change',upd);e.addEventListener('input',upd);}
+      });
+      setInterval(upd,700); upd();
+      if('IntersectionObserver' in window){
+        var io=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target)}})},{threshold:.08});
+        var go=function(){document.querySelectorAll('.reveal:not(.in)').forEach(function(n){io.observe(n)})};
+        go(); setInterval(go,800);
+      } else document.querySelectorAll('.reveal').forEach(function(n){n.classList.add('in')});
+    })();
+    </script>
 </body>
 </html>
