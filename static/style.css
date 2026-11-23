@@ -15,12 +15,13 @@
 
     --text-primary: #f2eee9;
     --text-secondary: #a3aabb;
+    --accent-text: #e08a55;
     --text-muted: #6f7788;
 
-    --accent: #ff6a0d;
-    --accent-strong: #ff8533;
-    --accent-ink: rgba(255, 106, 13, 0.14);
-    --accent-light: rgba(255, 106, 13, 0.14);
+    --accent: #c85a1e;
+    --accent-strong: #d96a2b;
+    --accent-ink: rgba(200, 90, 30, 0.12);
+    --accent-light: rgba(200, 90, 30, 0.12);
 
     --positive: #34d399;
     --positive-bg: rgba(52, 211, 153, 0.10);
@@ -42,7 +43,7 @@ html { color-scheme: dark; }
 
 body {
     background: var(--bg);
-    background-image: radial-gradient(900px 420px at 85% -10%, rgba(255,106,13,.10), transparent 60%);
+    background-image: radial-gradient(900px 420px at 85% -10%, rgba(200,90,30,.05), transparent 60%);
     color: var(--text-primary);
     font-family: var(--font-sans);
     font-size: 14px;
@@ -63,7 +64,7 @@ body {
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
     padding: 32px;
-    box-shadow: 0 30px 80px -40px rgba(255, 106, 13, 0.25);
+    box-shadow: 0 30px 80px -40px rgba(0,0,0,.6);
 }
 
 /* ---------- Barra superior ---------- */
@@ -174,7 +175,7 @@ select, input[type="time"] {
 }
 select { text-overflow: ellipsis; }
 select:focus, input[type="time"]:focus {
-    border-color: var(--accent); box-shadow: 0 0 0 3px rgba(255,106,13,.22);
+    border-color: var(--accent); box-shadow: 0 0 0 3px rgba(200,90,30,.20);
 }
 select:disabled { opacity: .4; cursor: not-allowed; }
 option { background: #151823; color: var(--text-primary); }
@@ -184,7 +185,7 @@ option { background: #151823; color: var(--text-primary); }
 
 /* ---------- Aviso informativo ---------- */
 .info-banner {
-    background: var(--accent-ink); border: 1px solid rgba(255,106,13,.28);
+    background: var(--accent-ink); border: 1px solid rgba(200,90,30,.25);
     border-radius: var(--radius-md); padding: 14px 16px;
     display: flex; gap: 12px; margin: 6px 0 26px; align-items: flex-start;
 }
@@ -248,7 +249,7 @@ footer {
 .toast.show { animation: slideUp .25s ease forwards; }
 .toast.error   { border-color: rgba(255,107,94,.5); color: #ffb4ab; background: #2a1210; }
 .toast.success { border-color: rgba(52,211,153,.45); color: #a7f3d0; background: #0d2219; }
-.toast.warning { border-color: rgba(255,106,13,.5); color: #ffd0a8; background: #2a1707; }
+.toast.warning { border-color: rgba(200,90,30,.45); color: #ecc3a4; background: #24180f; }
 @keyframes slideUp { from { transform: translate(-50%, 16px); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
 
 /* ---------- Campos de texto (login / admin) ---------- */
@@ -259,7 +260,7 @@ input[type="text"], input[type="password"], input[type="number"] {
     transition: border-color .15s, box-shadow .15s;
 }
 input[type="text"]:focus, input[type="password"]:focus, input[type="number"]:focus {
-    border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px rgba(255,106,13,.22);
+    border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px rgba(200,90,30,.20);
 }
 input::placeholder { color: var(--text-muted); }
 
@@ -348,8 +349,19 @@ input::placeholder { color: var(--text-muted); }
 .btn-chip, .btn-submit, .btn-secondary, .step, .tiendas button, .slot { will-change: transform; }
 .btn-chip:hover { transform: translateY(-1px); border-color: var(--accent); }
 .btn-submit.ready { animation: pulse 2.2s ease-in-out infinite; }
-@keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(255,106,13,.45); } 50% { box-shadow: 0 0 0 10px rgba(255,106,13,0); } }
+@keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(200,90,30,.35); } 50% { box-shadow: 0 0 0 10px rgba(200,90,30,0); } }
 .form-group select:hover, .form-group input:hover { border-color: var(--text-muted); }
 
 .section-label { margin-top: 26px; }
 .form-grid { margin-bottom: 4px; }
+
+.hero-eyebrow{color:var(--accent-text)}
+.auth-eyebrow{color:var(--accent-text)}
+.admin-section h2{color:var(--accent-text)}
+.toolbar-brand-text h1{color:var(--accent-text)}
+.hero h2 em{color:var(--accent-text)}
+.auth-header h1 em{color:var(--accent-text)}
+.section-label span{color:var(--accent-text)}
+.banner-icon{color:var(--accent-text)}
+.step b{color:var(--accent-text)}.step.done b{color:var(--positive)}.banner-text strong{color:var(--accent-text)}.btn-chip.btn-primary-chip,.btn-submit{color:#fff;font-weight:600}
+.step.now{border-color:rgba(200,90,30,.6)}
