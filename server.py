@@ -937,7 +937,7 @@ def is_own_brand(marca_db, empresa):
         # propia de Damasco (antes solo lo era cuando venía como "DA+CO | MIDEA").
         own_brands = ['DA+CO', 'DACO', 'DAMASCO', 'VENELECTR', 'SYON', 'MIDEA']
     elif 'multimax' in emp:
-        own_brands = ['CLX', 'CONDESA', 'FRIGILUX', 'REINITA', 'MILATTI', 'KUCCE', 'VETRUX', 'ITOK', 'MUNDO BLANCO']
+        own_brands = ['CLX', 'CONDESA', 'FRIGILUX', 'MILATTI', 'KUCCE', 'VETRUX', 'ITOK', 'MUNDO BLANCO']
     else:
         own_brands = []
         
@@ -948,7 +948,7 @@ def obtener_grupo_marca(marca):
     m = m.replace("+", "").replace(" ", "").replace("-", "")
     if any(k in m for k in ['damasco', 'daco']):
         return 'damasco'
-    if any(k in m for k in ['multimax', 'clx', 'reinita', 'condesa', 'frigilux', 'milatti', 'kucce', 'vetrux', 'mundoblanco']):
+    if any(k in m for k in ['multimax', 'clx', 'condesa', 'frigilux', 'milatti', 'kucce', 'vetrux', 'mundoblanco']):
         return 'multimax'
     if 'daka' in m:
         return 'daka'
@@ -1695,7 +1695,7 @@ def fetch_data(gid_base=None, force_sync=False):
                     URL_TIPIFICACIONES, 
                     headers={'User-Agent': 'Mozilla/5.0'}
                 )
-                with urllib.request.urlopen(req1, timeout=10) as response:
+                with urllib.request.urlopen(req1, timeout=60) as response:
                     df_campo = pd.read_csv(io.StringIO(response.read().decode('utf-8')))
                 df_campo.to_csv(cache_campo, index=False)
                 _cache_campo_data = df_campo
@@ -1724,7 +1724,7 @@ def fetch_data(gid_base=None, force_sync=False):
                     url_base, 
                     headers={'User-Agent': 'Mozilla/5.0'}
                 )
-                with urllib.request.urlopen(req2, timeout=10) as response:
+                with urllib.request.urlopen(req2, timeout=60) as response:
                     df_maestro = pd.read_csv(io.StringIO(response.read().decode('utf-8')))
                 df_maestro.to_csv(cache_maestro, index=False)
                 _cache_maestro_data[gid_base] = df_maestro
@@ -4184,7 +4184,7 @@ def sync_database():
                 URL_TIPIFICACIONES, 
                 headers={'User-Agent': 'Mozilla/5.0'}
             )
-            with urllib.request.urlopen(req1, timeout=10) as response:
+            with urllib.request.urlopen(req1, timeout=60) as response:
                 df_campo = pd.read_csv(io.StringIO(response.read().decode('utf-8')))
             df_campo.to_csv(cache_campo_path, index=False)
             _cache_campo_data = df_campo
@@ -4198,7 +4198,7 @@ def sync_database():
                     url_base, 
                     headers={'User-Agent': 'Mozilla/5.0'}
                 )
-                with urllib.request.urlopen(req2, timeout=10) as response:
+                with urllib.request.urlopen(req2, timeout=60) as response:
                     df_maestro = pd.read_csv(io.StringIO(response.read().decode('utf-8')))
                 df_maestro.to_csv(cache_maestro_path, index=False)
                 
