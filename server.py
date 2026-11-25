@@ -2095,6 +2095,34 @@ def refinar_con_gemini(df, universo_maestro, empresa_clave=''):
     return df
 
 
+# --- Productos "a mano" cargados desde /cargar ("Usar lo que escribí tal cual" o precio corregido) ---
+# /cargar los guarda con el prefijo [MANUAL] en la columna Producto. El reporte NO los pasa por el
+# emparejamiento (ni por la IA): usa el nombre tal como se escribió y, si trae precio > 0, ese precio.
+def _es_manual(v):
+    return str(v).strip().upper().startswith('[MANUAL]')
+
+def _quitar_manual(v):
+    return re.sub(r'^\s*\[MANUAL\]\s*', '', str(v), flags=re.IGNORECASE)
+
+def _precios_guardados(df):
+    if 'Precio' not in df.columns:
+        return pd.Series(0.0, index=df.index)
+    t = df['Precio'].astype(str).str.replace(' ', '').str.replace(',', '.')
+    return pd.to_numeric(t, errors='coerce').fillna(0.0)
+
+def _aplicar_precio_manual(df, mask):
+    """En las filas manuales con precio > 0, usa ese precio y la marca escrita."""
+    if not mask.any():
+        return df
+    pr = _precios_guardados(df)
+    usar = mask & (pr > 0)
+    df.loc[usar, 'PRECIO_MAESTRO'] = pr[usar].apply(round_half_up)
+    if 'Marca' in df.columns:
+        mc = df['Marca'].astype(str).str.strip()
+        ok = mask & df['MARCA_MAESTRA'].eq('Desconocida') & ~mc.str.upper().isin(['', 'N/D', 'NAN'])
+        df.loc[ok, 'MARCA_MAESTRA'] = mc[ok]
+    return df
+
 def matchear_productos(df_filtered, df_maestro, prices_numeric, mapeo_precios, mapeo_marcas):
     """
     Construye el universo maestro estandarizado a partir de df_maestro y corre el
@@ -2146,6 +2174,9 @@ def matchear_productos(df_filtered, df_maestro, prices_numeric, mapeo_precios, m
 
     # Matching corre solo sobre df_filtered (el subconjunto del reporte), no sobre todo df_campo
     df_filtered = df_filtered.copy()
+    mask_manual = df_filtered['Producto'].apply(_es_manual)
+    if mask_manual.any():
+        df_filtered.loc[mask_manual, 'Producto'] = df_filtered.loc[mask_manual, 'Producto'].apply(_quitar_manual)
 
     # FIX (cosmético, hallado durante las pruebas de la sesión 2; ampliado en
     # sesión 28): las filas marcador de "hora sin ventas" (ver
@@ -2161,14 +2192,20 @@ def matchear_productos(df_filtered, df_maestro, prices_numeric, mapeo_precios, m
     def _match_row(row):
         if es_sin_productos.loc[row.name]:
             return PRODUCTO_SIN_VENTAS
+        if mask_manual.loc[row.name]:
+            return str(row['Producto']).strip()
         if es_producto_por_identificar(row['Producto']):
             return PRODUCTO_POR_IDENTIFICAR
         return buscar_coincidencia_tecnica(row, universo_maestro)
 
     df_filtered['PRODUCTO_CORRECTO'] = df_filtered.apply(_match_row, axis=1)
     df_filtered = refinar_con_gemini(df_filtered, universo_maestro, str(len(universo_maestro)))
+    if mask_manual.any():
+        df_filtered.loc[mask_manual, 'PRODUCTO_CORRECTO'] = df_filtered.loc[mask_manual, 'Producto'].astype(str).str.strip()
+        df_filtered.loc[mask_manual, 'REVISION_IA'] = ''
     df_filtered['PRECIO_MAESTRO'] = df_filtered['PRODUCTO_CORRECTO'].map(mapeo_precios).fillna(0.0).apply(round_half_up)
     df_filtered['MARCA_MAESTRA'] = df_filtered['PRODUCTO_CORRECTO'].map(mapeo_marcas).fillna("Desconocida")
+    df_filtered = _aplicar_precio_manual(df_filtered, mask_manual)
     df_filtered['VENTA_TOTAL'] = df_filtered['PRECIO_MAESTRO'] * df_filtered['Cantidad']
     df_filtered['CATEGORIA'] = df_filtered['PRODUCTO_CORRECTO'].apply(categorizar_producto)
 
@@ -4086,8 +4123,14 @@ def generate_observations():
             # pero solo sobre estas ~decenas/cientos de filas del estudio anterior, no
             # sobre todo el histórico — se sigue evitando el costo original.
             df_prev_filtered = df_prev_filtered.copy()
-            df_prev_filtered['PRODUCTO_CORRECTO'] = df_prev_filtered.apply(lambda r: buscar_coincidencia_tecnica(r, universo_maestro), axis=1)
+            _m_prev = df_prev_filtered['Producto'].apply(_es_manual)
+            if _m_prev.any():
+                df_prev_filtered.loc[_m_prev, 'Producto'] = df_prev_filtered.loc[_m_prev, 'Producto'].apply(_quitar_manual)
+            df_prev_filtered['PRODUCTO_CORRECTO'] = df_prev_filtered.apply(
+                lambda r: str(r['Producto']).strip() if _m_prev.loc[r.name] else buscar_coincidencia_tecnica(r, universo_maestro), axis=1)
             df_prev_filtered['PRECIO_MAESTRO'] = df_prev_filtered['PRODUCTO_CORRECTO'].map(mapeo_precios).fillna(0.0).apply(round_half_up)
+            df_prev_filtered['MARCA_MAESTRA'] = df_prev_filtered['PRODUCTO_CORRECTO'].map(mapeo_marcas).fillna("Desconocida")
+            df_prev_filtered = _aplicar_precio_manual(df_prev_filtered, _m_prev)
             df_prev_filtered['VENTA_TOTAL'] = df_prev_filtered['PRECIO_MAESTRO'] * df_prev_filtered['Cantidad']
             prev_sales, prev_visits = get_projected_totals(df_prev_filtered, opening_hour, limit_hour, empresa)
             sales_var = ((curr_sales - prev_sales) / prev_sales * 100.0) if prev_sales > 0 else 0.0

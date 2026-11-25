@@ -611,7 +611,7 @@ def init_cargador(app, G):
                     filas.append(comunes + ['Sin productos', '', '', '', '', vis])
                     continue
                 for f in b['filas']:
-                    filas.append(comunes + [str(f['producto']).strip(), str(f.get('marca') or 'N/D'),
+                    filas.append(comunes + [('[MANUAL] ' if f.get('manual') else '') + str(f['producto']).strip(), str(f.get('marca') or 'N/D'),
                                             int(f['cant']), float(f.get('precio') or 0), f"WA{f['factura']}", vis])
             if not filas:
                 return jsonify({'success': False, 'error': 'No hay nada para guardar.'}), 400
@@ -671,9 +671,12 @@ def init_cargador(app, G):
                 if str(r[8]).strip().lower() in ('sin productos', ''):
                     continue
                 m = re.search(r'(\d+)', str(r[12]))
+                es_man = str(r[8]).strip().upper().startswith('[MANUAL]')
+                nombre = re.sub(r'^\s*\[MANUAL\]\s*', '', str(r[8]), flags=re.I)
                 filas.append({'factura': int(m.group(1)) if m else len(filas) + 1, 'cant': _num(r[10], True) or 1,
-                              'original': 'Ya guardado', 'producto': str(r[8]), 'marca': str(r[9] or 'N/D'),
-                              'precio': _num(r[11]), 'estado': 'OK', 'nota': ''})
+                              'original': 'Ya guardado', 'producto': nombre, 'marca': str(r[9] or 'N/D'),
+                              'precio': _num(r[11]), 'estado': 'OK', 'nota': 'Escrito a mano' if es_man else '',
+                              'manual': es_man})
             return jsonify({'success': True, 'codigo': cod, 'empresa': emp, 'tienda': _nombre_corto(emp, rs[0][5]),
                             'fecha': str(rs[0][1])[:10], 'horario': rs[0][2], 'visitas': rs[0][13], 'id_envio': hid,
                             'filas': filas})

@@ -357,15 +357,15 @@ function filaTabla(f){
   tr.appendChild(h('td',{},[h('span',{class:'chip'+(f.estado==='REVISAR'?' rev':''),text:f.estado==='REVISAR'?'Revisar':'OK'})]));
   return tr;
 }
-function celdaPrecio(f){return h('td',{},[h('input',{class:'inp',type:'number',min:'0',step:'0.01',value:String(f.precio||''),placeholder:'0','aria-label':'Precio',title:'Puedes corregir el precio de esta línea',style:'width:92px;padding:8px 10px',oninput:function(e){var v=parseFloat(String(e.target.value).replace(',','.'));f.precio=isNaN(v)||v<0?0:v;if(f.precio>0&&f.estado==='REVISAR'){f.nota=(f.nota||'')+' · precio puesto a mano'}}})])}
+function celdaPrecio(f){return h('td',{},[h('input',{class:'inp',type:'number',min:'0',step:'0.01',value:String(f.precio||''),placeholder:'0','aria-label':'Precio',title:'Puedes corregir el precio de esta línea',style:'width:92px;padding:8px 10px',oninput:function(e){var v=parseFloat(String(e.target.value).replace(',','.'));f.precio=isNaN(v)||v<0?0:v;if(f.precio>0)f.manual=true;if(f.precio>0&&f.estado==='REVISAR'){f.nota=(f.nota||'')+' · precio puesto a mano'}}})])}
 function abrirBusqueda(f,cont,celda,tr){
   cont.innerHTML='';var inp=h('input',{class:'inp',type:'text',placeholder:'Escribe para buscar en la base…','aria-label':'Buscar producto en la base',style:'margin-top:6px;width:100%;max-width:520px'});
   var lista=h('div',{class:'bus',style:'display:none'});cont.appendChild(inp);cont.appendChild(lista);inp.focus();var t=null;
   inp.addEventListener('input',function(){clearTimeout(t);var q=inp.value;t=setTimeout(function(){
     api('/api/cargar/buscar_producto?empresa='+encodeURIComponent(S.analisis.empresa)+'&q='+encodeURIComponent(q)).then(function(j){
       lista.innerHTML='';var rs=(j.resultados||[]);lista.style.display=rs.length?'':'none';
-      rs.forEach(function(r){lista.appendChild(h('button',{onclick:function(){f.producto=r.producto;f.marca=r.marca||'N/D';f.precio=r.precio;f.estado='OK';f.nota='Elegido a mano';pintaPreview()}},[h('span',{text:r.producto}),h('b',{text:'$'+r.precio,style:'color:var(--ac)'})]))});
-      lista.appendChild(h('button',{onclick:function(){f.producto=inp.value.trim()||f.producto;f.marca=f.marca||'N/D';f.precio=0;f.estado='REVISAR';f.nota='Se guarda tal como lo escribiste';pintaPreview()}},[h('span',{text:'Usar lo que escribí tal cual (no está en la base)'})]));
+      rs.forEach(function(r){lista.appendChild(h('button',{onclick:function(){f.producto=r.producto;f.marca=r.marca||'N/D';f.precio=r.precio;f.estado='OK';f.nota='Elegido a mano';f.manual=false;pintaPreview()}},[h('span',{text:r.producto}),h('b',{text:'$'+r.precio,style:'color:var(--ac)'})]))});
+      lista.appendChild(h('button',{onclick:function(){f.producto=inp.value.trim()||f.producto;f.marca=f.marca||'N/D';f.precio=f.precio||0;f.estado='OK';f.manual=true;f.nota='Escrito a mano: el reporte lo usa tal cual. Escribe su precio en la columna PRECIO.';pintaPreview()}},[h('span',{text:'Usar lo que escribí tal cual (no está en la base)'})]));
       lista.style.display='';
     })},300)});
 }
